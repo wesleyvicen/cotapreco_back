@@ -4,12 +4,13 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.Instant;
 
-@Entity @Table(name = "produtos", uniqueConstraints = @UniqueConstraint(columnNames = {"empresa_id", "gtin"}))
+@Entity @Table(name = "produtos")
 @Getter @Setter @NoArgsConstructor
 public class Produto {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "empresa_id") private Empresa empresa;
-    @Column(nullable = false, length = 14) private String gtin;
+    @Column(length = 14) private String ean;
+    @Column(name = "identificador_catalogo", nullable = false, length = 260) private String identificadorCatalogo;
     @Column(name = "nome", nullable = false, length = 240) private String nome;
     @Column(name = "laboratorio", length = 160) private String laboratorio;
     @Column(name = "apresentacao", length = 160) private String apresentacao;

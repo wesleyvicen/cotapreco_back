@@ -18,11 +18,25 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 10MB
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USUARIO:}
+    password: ${SMTP_SENHA:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTENTICACAO:false}
+      mail.smtp.starttls.enable: ${SMTP_TLS:false}
+      mail.smtp.connectiontimeout: ${SMTP_TIMEOUT_MS:5000}
+      mail.smtp.timeout: ${SMTP_TIMEOUT_MS:5000}
+      mail.smtp.writetimeout: ${SMTP_TIMEOUT_MS:5000}
 server:
   error:
     include-message: never
 app:
+  backend-public-url: ${BACKEND_PUBLIC_URL:http://localhost:8080}
   jwt:
     secret: ${JWT_SECRET:cotapreco-local-secret-change-me-please-32-characters}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:480}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  email:
+    remetente: ${EMAIL_REMETENTE:CotaPreco <nao-responda@cotapreco.local>}

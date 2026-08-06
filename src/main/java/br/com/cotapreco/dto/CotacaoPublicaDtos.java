@@ -9,19 +9,31 @@ import java.util.List;
 
 public final class CotacaoPublicaDtos {
     private CotacaoPublicaDtos() {}
-    public record ItemCotacaoPublica(String gtin, String productName, Integer requestedQuantity) {}
-    public record VisaoCotacaoPublica(String companyName, String quotationName, Instant expiresAt, int productCount,
-        boolean acceptingResponses, List<ItemCotacaoPublica> items) {}
-    public record SolicitacaoInicioResposta(@NotBlank @Size(max = 120) String representativeName,
-        @NotBlank @Size(max = 160) String supplierName, @NotBlank @Size(max = 30) String phone,
-        @Email @Size(max = 180) String email, @Size(max = 20) String supplierDocument) {}
-    public record InicioResposta(String responseToken) {}
-    public record VisaoItemResposta(Long id, String gtin, String productName, Integer requestedQuantity,
-        BigDecimal unitPrice, Integer availableQuantity, boolean available, String observation) {}
-    public record VisaoRespostaPublica(String responseToken, String companyName, String quotationName,
-        String representativeName, String supplierName, StatusResposta status, Instant expiresAt,
-        List<VisaoItemResposta> items) {}
-    public record AtualizacaoItemResposta(@NotNull Long id, @DecimalMin(value = "0.0001", message = "Preço deve ser maior que zero") BigDecimal unitPrice,
-        @Min(0) Integer availableQuantity, boolean available, @Size(max = 500) String observation) {}
-    public record SolicitacaoAtualizacaoItens(@NotEmpty List<@Valid AtualizacaoItemResposta> items) {}
+
+    public record ItemCotacaoPublica(String ean, String nomeProduto, Integer quantidadeSolicitada) {}
+    public record VisaoCotacaoPublica(String nomeEmpresa, String nomeCotacao, Instant expiraEm, int totalProdutos,
+        boolean aceitaRespostas, List<ItemCotacaoPublica> itens) {}
+
+    public record SolicitacaoNovaResposta(
+        @NotBlank @Size(max = 160) String nomeDistribuidora,
+        @Size(max = 20) String documentoDistribuidora) {}
+
+    public record ResumoRespostaPublica(Long id, String nomeDistribuidora, String documentoDistribuidora,
+        StatusResposta status, Instant enviadoEm, Instant atualizadoEm, int totalItensCotados, BigDecimal valorTotal) {}
+
+    public record VisaoItemResposta(Long id, String ean, String nomeProduto, Integer quantidadeSolicitada,
+        BigDecimal precoUnitario, Integer quantidadeDisponivel, boolean disponivel, String observacao) {}
+
+    public record VisaoRespostaPublica(Long id, String nomeEmpresa, String nomeCotacao, String nomeRepresentante,
+        String nomeDistribuidora, String documentoDistribuidora, StatusResposta status, Instant expiraEm,
+        boolean podeCorrigir, List<VisaoItemResposta> itens) {}
+
+    public record AtualizacaoItemResposta(@NotNull Long id,
+        @DecimalMin(value = "0.0001", message = "Preço deve ser maior que zero") BigDecimal precoUnitario,
+        @Min(0) Integer quantidadeDisponivel, boolean disponivel, @Size(max = 500) String observacao) {}
+
+    public record SolicitacaoAtualizacaoResposta(
+        @NotBlank @Size(max = 160) String nomeDistribuidora,
+        @Size(max = 20) String documentoDistribuidora,
+        @NotEmpty List<@Valid AtualizacaoItemResposta> itens) {}
 }

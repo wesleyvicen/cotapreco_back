@@ -1,6 +1,7 @@
 package br.com.cotapreco.exception;
 
 import org.springframework.http.*;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -17,6 +18,11 @@ public class TratadorExcecoesApi {
     @ExceptionHandler(RegraNegocioException.class)
     ResponseEntity<ErroApi> business(RegraNegocioException ex) { return error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), Map.of()); }
 
+    @ExceptionHandler(ErroValidacaoNegocioException.class)
+    ResponseEntity<ErroApi> businessValidation(ErroValidacaoNegocioException ex) {
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), ex.getCampos());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ErroApi> validation(MethodArgumentNotValidException ex) {
         Map<String, String> fields = new LinkedHashMap<>();
@@ -26,6 +32,9 @@ public class TratadorExcecoesApi {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<ErroApi> maxUpload(MaxUploadSizeExceededException ex) { return error(HttpStatus.BAD_REQUEST, "O arquivo excede o limite de 10 MB.", Map.of()); }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ErroApi> forbidden(AccessDeniedException ex) { return error(HttpStatus.FORBIDDEN, "Você não tem permissão para realizar esta operação.", Map.of()); }
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<ErroApi> generic(Exception ex) { return error(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível concluir a operação.", Map.of()); }

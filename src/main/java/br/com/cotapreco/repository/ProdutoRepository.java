@@ -5,6 +5,7 @@ import java.util.*;
 public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     List<Produto> findAllByEmpresaIdOrderByNome(Long companyId);
     Optional<Produto> findByEmpresaIdAndId(Long companyId, Long id);
-    Optional<Produto> findByEmpresaIdAndGtin(Long companyId, String gtin);
-    List<Produto> findAllByEmpresaIdAndGtinIn(Long companyId, Collection<String> gtins);
+    Optional<Produto> findByEmpresaIdAndEan(Long empresaId, String ean);
+    List<Produto> findAllByEmpresaIdAndEanIn(Long empresaId, Collection<String> eans);
+    Optional<Produto> findByEmpresaIdAndIdentificadorCatalogo(Long empresaId, String identificadorCatalogo);
 }

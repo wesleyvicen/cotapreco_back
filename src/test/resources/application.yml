@@ -10,8 +10,14 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  mail:
+    host: localhost
+    port: 1025
 app:
+  backend-public-url: http://localhost:8080
   jwt:
     secret: test-secret-key-with-at-least-thirty-two-characters
     expiration-minutes: 60
   frontend-url: http://localhost:5173
+  email:
+    remetente: testes@cotapreco.local

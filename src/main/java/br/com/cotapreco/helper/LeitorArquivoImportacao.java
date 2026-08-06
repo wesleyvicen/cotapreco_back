@@ -10,7 +10,7 @@ import java.util.*;
 
 @Component
 public class LeitorArquivoImportacao {
-    public record LinhaBruta(int row, String gtin, String name, String quantity) {}
+    public record LinhaBruta(int row, String ean, String name, String quantity) {}
 
     public List<LinhaBruta> parse(MultipartFile file) {
         String filename = Optional.ofNullable(file.getOriginalFilename()).orElse("").toLowerCase(Locale.ROOT);
@@ -46,8 +46,8 @@ public class LeitorArquivoImportacao {
         try (Workbook workbook = WorkbookFactory.create(input)) {
             Sheet sheet = workbook.getSheetAt(0); DataFormatter formatter = new DataFormatter();
             for (int i = 1; i <= sheet.getLastRowNum(); i++) { Row row = sheet.getRow(i); if (row == null) continue;
-                String gtin = formatter.formatCellValue(row.getCell(0)).trim(); String name = formatter.formatCellValue(row.getCell(1)).trim();
-                String quantity = formatter.formatCellValue(row.getCell(2)).trim(); if (!gtin.isBlank() || !name.isBlank() || !quantity.isBlank()) result.add(new LinhaBruta(i + 1, gtin.replace(".0", ""), name, quantity));
+                String ean = formatter.formatCellValue(row.getCell(0)).trim(); String name = formatter.formatCellValue(row.getCell(1)).trim();
+                String quantity = formatter.formatCellValue(row.getCell(2)).trim(); if (!ean.isBlank() || !name.isBlank() || !quantity.isBlank()) result.add(new LinhaBruta(i + 1, ean.replace(".0", ""), name, quantity));
             }
         } return result;
     }
