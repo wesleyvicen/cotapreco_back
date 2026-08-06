@@ -7,6 +7,9 @@ import br.com.cotapreco.security.UsuarioAtualService;
 import br.com.cotapreco.service.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,10 +19,24 @@ import java.util.List;
 public class CotacaoController {
     private final CotacaoService service; private final ComparacaoCotacaoService comparisonService;
     private final EscolhaCompraCotacaoService purchaseSelectionService; private final PlanoCompraService purchasePlanService; private final UsuarioAtualService currentUser;
+    private final GeradorModeloImportacaoService templateService;
     @GetMapping public List<ResumoCotacao> list() { return service.list(); }
     @GetMapping("/{id}") public VisaoCotacao get(@PathVariable Long id) { return service.get(id); }
     @PostMapping @PreAuthorize("hasAnyRole('ADMIN','BUYER')") public VisaoCotacao create(@Valid @RequestBody SolicitacaoCriacaoCotacao request) { return service.create(request); }
-    @PostMapping(value = "/import/preview", consumes = "multipart/form-data") @PreAuthorize("hasAnyRole('ADMIN','BUYER')") public PreviaImportacao preview(@RequestPart("file") MultipartFile file) { return service.preview(file); }
+    @PostMapping(value = "/import/analyze", consumes = "multipart/form-data") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
+    public AnaliseArquivoImportacao analyze(@RequestPart("file") MultipartFile file) { return service.analyzeImport(file); }
+    @PostMapping(value = "/import/preview", consumes = "multipart/form-data") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
+    public PreviaImportacao preview(@RequestPart("file") MultipartFile file,
+        @Valid @RequestPart(value = "mapping", required = false) MapeamentoColunas mapping) { return service.preview(file, mapping); }
+    @PostMapping("/items/preview") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
+    public PreviaImportacao previewManual(@Valid @RequestBody SolicitacaoPreviaManual request) { return service.previewManual(request); }
+    @GetMapping("/import/template") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
+    public ResponseEntity<byte[]> template() {
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"modelo-cotacao-cotapreco.xlsx\"")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .body(templateService.gerar());
+    }
     @PostMapping("/{id}/open") @PreAuthorize("hasAnyRole('ADMIN','BUYER')") public VisaoCotacao open(@PathVariable Long id) { return service.open(id); }
     @PostMapping("/{id}/close") @PreAuthorize("hasAnyRole('ADMIN','BUYER')") public VisaoCotacao close(@PathVariable Long id) { return service.close(id); }
     @GetMapping("/{id}/responses") public List<VisaoResposta> responses(@PathVariable Long id) { return service.responses(id); }

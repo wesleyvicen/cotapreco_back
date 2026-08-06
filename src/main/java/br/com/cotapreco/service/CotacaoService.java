@@ -29,14 +29,45 @@ public class CotacaoService {
     @Value("${app.backend-public-url}") private String backendPublicUrl;
 
     @Transactional(readOnly = true)
-    public PreviaImportacao preview(MultipartFile file) {
-        Long companyId = currentUser.companyId(); List<LeitorArquivoImportacao.LinhaBruta> raw = parser.parse(file);
+    public AnaliseArquivoImportacao analyzeImport(MultipartFile file) {
+        var analysis = parser.analisar(file);
+        var mapping = analysis.suggestedMapping();
+        return new AnaliseArquivoImportacao(analysis.sheetName(), analysis.totalRows(),
+            analysis.columns().stream().map(column -> new ColunaArquivo(column.index(), column.name())).toList(),
+            new MapeamentoColunas(mapping.ean(), mapping.productName(), mapping.quantity(), mapping.laboratory()), analysis.sampleRows());
+    }
+
+    @Transactional(readOnly = true)
+    public PreviaImportacao preview(MultipartFile file) { return preview(file, null); }
+
+    @Transactional(readOnly = true)
+    public PreviaImportacao preview(MultipartFile file, MapeamentoColunas mapping) {
+        var mapped = mapping == null ? null : new LeitorArquivoImportacao.MapeamentoArquivo(mapping.ean(), mapping.productName(), mapping.quantity(), mapping.laboratory());
+        return previewLines(parser.parse(file, mapped));
+    }
+
+    @Transactional(readOnly = true)
+    public PreviaImportacao previewManual(SolicitacaoPreviaManual request) {
+        List<LeitorArquivoImportacao.LinhaBruta> lines = new ArrayList<>();
+        for (int index = 0; index < request.items().size(); index++) {
+            ItemPreviaManual item = request.items().get(index);
+            lines.add(new LeitorArquivoImportacao.LinhaBruta(item.row() == null ? index + 1 : item.row(), item.ean(),
+                item.productName(), item.quantity(), item.laboratory()));
+        }
+        return previewLines(lines);
+    }
+
+    private PreviaImportacao previewLines(List<LeitorArquivoImportacao.LinhaBruta> raw) {
+        Long companyId = currentUser.companyId();
         List<Produto> produtos = productRepository.findAllByEmpresaIdOrderByNome(companyId);
         Map<String, Produto> produtosPorEan = produtos.stream().filter(p -> p.getEan() != null)
             .collect(Collectors.toMap(Produto::getEan, Function.identity()));
         Map<String, List<Produto>> produtosPorNome = produtos.stream()
             .collect(Collectors.groupingBy(p -> NormalizadorProduto.normalizarNome(p.getNome())));
-        List<LinhaImportacao> lines = raw.stream().map(line -> validate(line, produtosPorEan, produtosPorNome)).toList();
+        Map<String, Long> occurrences = raw.stream().filter(line -> line.name() != null && !line.name().isBlank())
+            .collect(Collectors.groupingBy(this::importIdentifier, Collectors.counting()));
+        List<LinhaImportacao> lines = raw.stream()
+            .map(line -> validate(line, produtosPorEan, produtosPorNome, occurrences.getOrDefault(importIdentifier(line), 0L) > 1)).toList();
         int valid = (int) lines.stream().filter(LinhaImportacao::valid).count();
         return new PreviaImportacao(lines.size(), valid, lines.size() - valid, lines);
     }
@@ -56,6 +87,7 @@ public class CotacaoService {
             String ean = NormalizadorProduto.normalizarEan(input.ean());
             Produto product = localizarProduto(user.getEmpresa().getId(), ean, input.productName()).orElseGet(() -> {
                 Produto p = new Produto(); p.setEmpresa(user.getEmpresa()); p.setEan(ean); p.setNome(input.productName().trim());
+                p.setLaboratorio(clean(input.laboratory()));
                 p.setIdentificadorCatalogo(NormalizadorProduto.identificadorCatalogo(ean, input.productName())); return productRepository.save(p);
             });
             ItemCotacao item = new ItemCotacao(); item.setCotacao(q); item.setProduto(product); item.setQuantidadeSolicitada(input.quantity()); q.getItens().add(item);
@@ -80,12 +112,16 @@ public class CotacaoService {
     }
     public Cotacao findOwned(Long id) { return repository.findByEmpresaIdAndId(currentUser.companyId(), id).orElseThrow(() -> new RecursoNaoEncontradoException("Cotação não encontrada.")); }
     private LinhaImportacao validate(LeitorArquivoImportacao.LinhaBruta line, Map<String, Produto> produtosPorEan,
-        Map<String, List<Produto>> produtosPorNome) {
+        Map<String, List<Produto>> produtosPorNome, boolean duplicate) {
         String ean = NormalizadorProduto.normalizarEan(line.ean()); List<String> errors = new ArrayList<>(); Integer quantity = null;
         if (line.ean() != null && !line.ean().isBlank() && (ean == null || !ean.matches("\\d{8,14}")))
             errors.add("EAN deve conter de 8 a 14 dígitos.");
         if (line.name() == null || line.name().isBlank()) errors.add("Nome do produto é obrigatório.");
-        try { quantity = Integer.valueOf(line.quantity().replace(".0", "").trim()); if (quantity <= 0) errors.add("Quantidade deve ser maior que zero."); } catch (Exception ex) { errors.add("Quantidade inválida."); }
+        else if (line.name().trim().length() > 240) errors.add("Nome do produto deve ter no máximo 240 caracteres.");
+        try { quantity = new BigDecimal(line.quantity().trim().replace(',', '.')).intValueExact(); if (quantity <= 0) errors.add("Quantidade deve ser maior que zero."); } catch (Exception ex) { errors.add("Quantidade inválida."); }
+        String laboratory = clean(line.laboratory());
+        if (laboratory != null && laboratory.length() > 160) errors.add("Laboratório deve ter no máximo 160 caracteres.");
+        if (duplicate) errors.add("Produto duplicado na lista.");
         Produto product = null;
         if (ean != null) product = produtosPorEan.get(ean);
         else if (line.name() != null && !line.name().isBlank()) {
@@ -95,9 +131,14 @@ public class CotacaoService {
             else if (candidatos.size() > 1) errors.add("Há mais de um produto com este nome. Informe o EAN para diferenciá-lo.");
             else if (candidatos.size() == 1) product = candidatos.getFirst();
         }
-        return new LinhaImportacao(line.row(), ean, line.name() == null ? "" : line.name().trim(), quantity, errors.isEmpty(), product != null,
+        return new LinhaImportacao(line.row(), ean, line.name() == null ? "" : line.name().trim(), quantity, laboratory, errors.isEmpty(), product != null,
             product == null ? null : product.getId(), errors);
     }
+    private String importIdentifier(LeitorArquivoImportacao.LinhaBruta line) {
+        String ean = NormalizadorProduto.normalizarEan(line.ean());
+        return NormalizadorProduto.identificadorCatalogo(ean, line.name());
+    }
+    private String clean(String value) { return value == null || value.isBlank() ? null : value.trim(); }
     private Optional<Produto> localizarProduto(Long empresaId, String ean, String nome) {
         if (ean != null) return productRepository.findByEmpresaIdAndEan(empresaId, ean);
         List<Produto> candidatos = productRepository.findAllByEmpresaIdOrderByNome(empresaId).stream()

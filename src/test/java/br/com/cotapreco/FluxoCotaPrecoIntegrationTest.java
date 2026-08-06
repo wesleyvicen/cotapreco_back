@@ -12,6 +12,9 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -27,6 +30,7 @@ class FluxoCotaPrecoIntegrationTest {
     @Autowired EmpresaRepository empresas;
     @Autowired UsuarioRepository usuarios;
     @Autowired CotacaoRepository cotacoes;
+    @Autowired ProdutoRepository produtos;
     @Autowired RepresentanteRepository representantes;
     @Autowired TokenRedefinicaoSenhaRepresentanteRepository tokensRedefinicao;
     @Autowired PasswordEncoder codificador;
@@ -300,6 +304,90 @@ class FluxoCotaPrecoIntegrationTest {
     }
 
     @Test
+    void importaPlanilhaPorCabecalhosPermiteRemapeamentoEPreenchimentoManual() throws Exception {
+        String farmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String sufixo = UUID.randomUUID().toString().substring(0, 8);
+        byte[] arquivo = pedidoXlsx(sufixo);
+
+        MockMultipartFile analise = new MockMultipartFile("file", "PEDIDO.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", arquivo);
+        mvc.perform(multipart("/api/quotations/import/analyze").file(analise).header("Authorization", farmacia))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sheetName").value("data"))
+            .andExpect(jsonPath("$.totalRows").value(2))
+            .andExpect(jsonPath("$.columns.length()").value(8))
+            .andExpect(jsonPath("$.suggestedMapping.productName").value(4))
+            .andExpect(jsonPath("$.suggestedMapping.quantity").value(5))
+            .andExpect(jsonPath("$.suggestedMapping.ean").value(6))
+            .andExpect(jsonPath("$.suggestedMapping.laboratory").value(7))
+            .andExpect(jsonPath("$.sampleRows[0][4]").value("Produto PEDIDO " + sufixo));
+
+        MockMultipartFile previaArquivo = new MockMultipartFile("file", "PEDIDO.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", arquivo);
+        MockMultipartFile mapeamento = new MockMultipartFile("mapping", "mapping.json", MediaType.APPLICATION_JSON_VALUE,
+            mapper.writeValueAsBytes(Map.of("ean", 6, "productName", 4, "quantity", 5, "laboratory", 7)));
+        mvc.perform(multipart("/api/quotations/import/preview").file(previaArquivo).file(mapeamento).header("Authorization", farmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.validRows").value(2))
+            .andExpect(jsonPath("$.lines[0].ean").value("7891234567890"))
+            .andExpect(jsonPath("$.lines[0].productName").value("Produto PEDIDO " + sufixo))
+            .andExpect(jsonPath("$.lines[0].quantity").value(12))
+            .andExpect(jsonPath("$.lines[0].laboratory").value("Laboratório A"))
+            .andExpect(jsonPath("$.lines[1].ean").value("7899876543210"));
+
+        MockMultipartFile arquivoDuplicado = new MockMultipartFile("file", "PEDIDO.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", arquivo);
+        MockMultipartFile mapeamentoDuplicado = new MockMultipartFile("mapping", "mapping.json", MediaType.APPLICATION_JSON_VALUE,
+            mapper.writeValueAsBytes(Map.of("ean", 6, "productName", 4, "quantity", 4)));
+        mvc.perform(multipart("/api/quotations/import/preview").file(arquivoDuplicado).file(mapeamentoDuplicado)
+            .header("Authorization", farmacia)).andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.message").value("Cada campo deve usar uma coluna diferente."));
+
+        String manual = mapper.writeValueAsString(Map.of("items", List.of(
+            Map.of("row", 1, "ean", "7899876543210", "productName", "Produto manual " + sufixo,
+                "quantity", "3", "laboratory", "Laboratório Manual"),
+            Map.of("row", 2, "ean", "7899876543210", "productName", "Produto manual " + sufixo,
+                "quantity", "2", "laboratory", "Laboratório Manual"))));
+        mvc.perform(post("/api/quotations/items/preview").header("Authorization", farmacia)
+            .contentType(MediaType.APPLICATION_JSON).content(manual))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.invalidRows").value(2))
+            .andExpect(jsonPath("$.lines[0].errors[0]").value("Produto duplicado na lista."));
+
+        Long empresaId = usuarios.findByEmailIgnoreCase("admin@cotapreco.local").orElseThrow().getEmpresa().getId();
+        String eanExistente = eanAleatorio(), eanNovo = eanAleatorio();
+        mvc.perform(post("/api/products").header("Authorization", farmacia).contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("ean", eanExistente, "name", "Produto existente " + sufixo,
+                "laboratory", "Laboratório Original"))))
+            .andExpect(status().isOk());
+        String cotacao = mapper.writeValueAsString(Map.of("name", "Cotação laboratório " + sufixo, "items", List.of(
+            Map.of("ean", eanExistente, "productName", "Produto existente " + sufixo, "quantity", 1, "laboratory", "Não sobrescrever"),
+            Map.of("ean", eanNovo, "productName", "Produto novo " + sufixo, "quantity", 2, "laboratory", "Laboratório Novo"))));
+        mvc.perform(post("/api/quotations").header("Authorization", farmacia).contentType(MediaType.APPLICATION_JSON).content(cotacao))
+            .andExpect(status().isOk());
+        assertThat(produtos.findByEmpresaIdAndEan(empresaId, eanExistente).orElseThrow().getLaboratorio()).isEqualTo("Laboratório Original");
+        assertThat(produtos.findByEmpresaIdAndEan(empresaId, eanNovo).orElseThrow().getLaboratorio()).isEqualTo("Laboratório Novo");
+    }
+
+    @Test
+    void geraModeloExcelVazioComEanComoTexto() throws Exception {
+        String farmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        byte[] modelo = mvc.perform(get("/api/quotations/import/template").header("Authorization", farmacia))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Content-Disposition", "attachment; filename=\"modelo-cotacao-cotapreco.xlsx\""))
+            .andExpect(content().contentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .andReturn().getResponse().getContentAsByteArray();
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(modelo))) {
+            var sheet = workbook.getSheet("Produtos");
+            assertThat(sheet).isNotNull();
+            assertThat(sheet.getLastRowNum()).isZero();
+            assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("EAN");
+            assertThat(sheet.getRow(0).getCell(1).getStringCellValue()).isEqualTo("Produto");
+            assertThat(sheet.getRow(0).getCell(2).getStringCellValue()).isEqualTo("Quantidade");
+            assertThat(sheet.getRow(0).getCell(3).getStringCellValue()).isEqualTo("Laboratório");
+            assertThat(sheet.getColumnStyle(0).getDataFormatString()).isEqualTo("@");
+        }
+    }
+
+    @Test
     void loginDoRepresentanteNormalizaTelefoneERecuperacaoNaoRevelaConta() throws Exception {
         String autenticacaoFarmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
         String tokenCotacao = criarEAbrirCotacao(autenticacaoFarmacia, "Cotação para login");
@@ -463,6 +551,28 @@ class FluxoCotaPrecoIntegrationTest {
     private Map<String,Object> itemPlano(long itemId, int desejada, Long respostaId, Integer quantidadeCampeao, String justificativa, boolean manual) {
         Map<String,Object> item = new LinkedHashMap<>(); item.put("quotationItemId", itemId); item.put("desiredQuantity", desejada);
         item.put("selectedResponseId", respostaId); item.put("championQuantity", quantidadeCampeao); item.put("stockOverrideNote", justificativa); item.put("manualSelection", manual); return item;
+    }
+    private byte[] pedidoXlsx(String sufixo) throws Exception {
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            var sheet = workbook.createSheet("data");
+            var header = sheet.createRow(0);
+            String[] headings = {"Data", "Pedido", "CNPJ Filial", "Cod Reduzido", "Descricao", "Quantidade", "EAN Principal", "Laboratorio"};
+            for (int index = 0; index < headings.length; index++) header.createCell(index).setCellValue(headings[index]);
+            var first = sheet.createRow(1);
+            first.createCell(0).setCellValue("06/08/2026"); first.createCell(1).setCellValue(65);
+            first.createCell(2).setCellValue("12.345.678/0001-90"); first.createCell(3).setCellValue(101);
+            first.createCell(4).setCellValue("Produto PEDIDO " + sufixo); first.createCell(5).setCellValue(12);
+            first.createCell(6).setCellValue(7891234567890d); first.createCell(7).setCellValue("Laboratório A");
+            var second = sheet.createRow(2);
+            second.createCell(1).setCellValue(66); second.createCell(4).setCellValue("Outro produto " + sufixo);
+            second.createCell(5).setCellValue(4); second.createCell(6).setCellValue("7.899876543210E12");
+            second.createCell(7).setCellValue("Laboratório B");
+            workbook.write(output);
+            return output.toByteArray();
+        }
+    }
+    private String eanAleatorio() {
+        return ("789" + UUID.randomUUID().toString().replaceAll("\\D", "") + "0000000000000").substring(0, 13);
     }
     private String loginFarmacia(String email, String senha) throws Exception {
         JsonNode corpo = json(mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
