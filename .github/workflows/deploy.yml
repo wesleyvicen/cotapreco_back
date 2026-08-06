@@ -1,4 +1,4 @@
-name: Deploy para VPS
+name: Deploy para VPS Cota Preco
 
 on:
   push:
