@@ -26,7 +26,7 @@ public class CotacaoService {
     private final PedidoCompraRepository purchaseOrderRepository;
     private final LeitorArquivoImportacao parser; private final GeradorToken tokenGenerator;
     private final ComparacaoCotacaoService comparisonService;
-    @Value("${app.backend-public-url}") private String backendPublicUrl;
+    @Value("${app.share-public-url:${app.backend-public-url}}") private String urlPublicaCompartilhamento;
 
     @Transactional(readOnly = true)
     public AnaliseArquivoImportacao analyzeImport(MultipartFile file) {
@@ -149,7 +149,7 @@ public class CotacaoService {
         return candidatos.stream().findFirst();
     }
     private ResumoCotacao listView(Cotacao q) { return new ResumoCotacao(q.getId(), q.getNome(), q.getStatus(), q.getExpiraEm(), q.getCriadoEm(), q.getItens().size(), responseRepository.countByCotacaoIdAndStatus(q.getId(), StatusResposta.SUBMITTED)); }
-    private VisaoCotacao view(Cotacao q) { return new VisaoCotacao(q.getId(), q.getNome(), q.getStatus(), q.getExpiraEm(), q.getCriadoEm(), q.getAtualizadoEm(), q.getTokenPublico(), q.getTokenPublico() == null ? null : removerBarra(backendPublicUrl) + "/api/publico/cotacoes/" + q.getTokenPublico() + "/compartilhar", q.getItens().stream().map(i -> new VisaoItemCotacao(i.getId(), i.getProduto().getId(), i.getProduto().getEan(), i.getProduto().getNome(), i.getProduto().getLaboratorio(), i.getQuantidadeSolicitada())).toList()); }
+    private VisaoCotacao view(Cotacao q) { return new VisaoCotacao(q.getId(), q.getNome(), q.getStatus(), q.getExpiraEm(), q.getCriadoEm(), q.getAtualizadoEm(), q.getTokenPublico(), q.getTokenPublico() == null ? null : removerBarra(urlPublicaCompartilhamento) + "/api/publico/cotacoes/" + q.getTokenPublico() + "/compartilhar", q.getItens().stream().map(i -> new VisaoItemCotacao(i.getId(), i.getProduto().getId(), i.getProduto().getEan(), i.getProduto().getNome(), i.getProduto().getLaboratorio(), i.getQuantidadeSolicitada())).toList()); }
     private String removerBarra(String valor) { return valor.endsWith("/") ? valor.substring(0, valor.length() - 1) : valor; }
     private VisaoResposta responseView(RespostaCotacao r) { long count = r.getItens().stream().filter(i -> i.isDisponivel() && i.getPrecoUnitario() != null).count(); BigDecimal total = r.getItens().stream().filter(i -> i.isDisponivel() && i.getPrecoUnitario() != null).map(i -> i.getPrecoUnitario().multiply(BigDecimal.valueOf(Math.min(Optional.ofNullable(i.getQuantidadeDisponivel()).orElse(0), i.getItemCotacao().getQuantidadeSolicitada())))).reduce(BigDecimal.ZERO, BigDecimal::add); return new VisaoResposta(r.getId(), r.getNomeDistribuidora(), r.getNomeRepresentante(), r.getTelefone(), r.getEmail(), r.getStatus(), r.getEnviadoEm(), r.getCriadoEm(), count, total); }
 }

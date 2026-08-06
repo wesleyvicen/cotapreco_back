@@ -34,6 +34,7 @@ server:
     include-message: never
 app:
   backend-public-url: ${BACKEND_PUBLIC_URL:http://localhost:8080}
+  share-public-url: ${SHARE_PUBLIC_URL:${BACKEND_PUBLIC_URL:http://localhost:8080}}
   jwt:
     secret: ${JWT_SECRET:cotapreco-local-secret-change-me-please-32-characters}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:480}

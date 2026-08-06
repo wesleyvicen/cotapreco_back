@@ -30,7 +30,7 @@ public class CompartilhamentoCotacaoService {
     private static final Color MENTA = new Color(190, 222, 211);
     private final CotacaoRepository cotacoes;
     @Value("${app.frontend-url}") private String urlFrontend;
-    @Value("${app.backend-public-url}") private String urlPublicaBackend;
+    @Value("${app.share-public-url:${app.backend-public-url}}") private String urlPublicaCompartilhamento;
     private BufferedImage imagemBase;
 
     @PostConstruct
@@ -105,7 +105,7 @@ public class CompartilhamentoCotacaoService {
         return cotacoes.findByTokenPublico(token).orElseThrow(() -> new RecursoNaoEncontradoException("Cotação não encontrada."));
     }
     private String frontend() { return removerBarra(urlFrontend.split(",")[0].trim()); }
-    private String backend() { return removerBarra(urlPublicaBackend); }
+    private String backend() { return removerBarra(urlPublicaCompartilhamento); }
     private String removerBarra(String valor) { return valor.endsWith("/") ? valor.substring(0, valor.length() - 1) : valor; }
     private String esc(String valor) { return HtmlUtils.htmlEscape(valor); }
     private void escrever(Graphics2D g, String texto, int x, int y, int tamanho, int estilo, Color cor) { g.setFont(new Font(Font.SANS_SERIF, estilo, tamanho));g.setColor(cor);g.drawString(texto, x, y); }
