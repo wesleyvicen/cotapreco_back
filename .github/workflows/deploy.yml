@@ -24,10 +24,10 @@ jobs:
       - name: Build do Projeto (gerar .jar)
         run: mvn -B clean package -DskipTests
 
-      - name: Renomear o .jar gerado para drogariacenter.jar
+      - name: Renomear o .jar gerado para cotapreco.jar
         run: |
           JAR=$(ls target/*.jar | head -n1)
-          cp "$JAR" target/drogariacenter.jar
+          cp "$JAR" target/cotapreco.jar
 
       - name: Listar conteúdo da pasta target (debug)
         run: ls -lh target
@@ -39,11 +39,11 @@ jobs:
         env:
           SSH_PASS: ${{ secrets.VPS_PASSWORD }}
         run: |
-          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no root@103.199.184.22 "mkdir -p /var/www/drogariacenter/target"
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no root@103.199.184.22 "mkdir -p /var/www/cotapreco/target"
           sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no root@103.199.184.22 '
-            if [ -f /var/www/drogariacenter/target/drogariacenter.jar ]; then
-              mv /var/www/drogariacenter/target/drogariacenter.jar /var/www/drogariacenter/target/drogariacenter-$(date +%Y%m%d%H%M%S).jar.bak
+            if [ -f /var/www/cotapreco/target/cotapreco.jar ]; then
+              mv /var/www/cotapreco/target/cotapreco.jar /var/www/cotapreco/target/cotapreco-$(date +%Y%m%d%H%M%S).jar.bak
             fi
           '
-          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no target/drogariacenter.jar root@103.199.184.22:/var/www/drogariacenter/target/drogariacenter.jar
-          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no root@103.199.184.22 "systemctl restart drogariacenter && systemctl status drogariacenter --no-pager || true"
+          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no target/cotapreco.jar root@103.199.184.22:/var/www/cotapreco/target/cotapreco.jar
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no root@103.199.184.22 "systemctl restart cotapreco && systemctl status cotapreco --no-pager || true"
