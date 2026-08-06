@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:cotapreco;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+app:
+  jwt:
+    secret: test-secret-key-with-at-least-thirty-two-characters
+    expiration-minutes: 60
+  frontend-url: http://localhost:5173

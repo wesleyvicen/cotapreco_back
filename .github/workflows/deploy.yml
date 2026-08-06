@@ -1,0 +1,49 @@
+name: Deploy para VPS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # REMOVIDO: chmod +x mvnw
+
+      - name: Build do Projeto (gerar .jar)
+        run: mvn -B clean package -DskipTests
+
+      - name: Renomear o .jar gerado para drogariacenter.jar
+        run: |
+          JAR=$(ls target/*.jar | head -n1)
+          cp "$JAR" target/drogariacenter.jar
+
+      - name: Listar conteúdo da pasta target (debug)
+        run: ls -lh target
+
+      - name: Instalar sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Enviar .jar para a VPS e reiniciar o serviço
+        env:
+          SSH_PASS: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no root@103.199.184.22 "mkdir -p /var/www/drogariacenter/target"
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no root@103.199.184.22 '
+            if [ -f /var/www/drogariacenter/target/drogariacenter.jar ]; then
+              mv /var/www/drogariacenter/target/drogariacenter.jar /var/www/drogariacenter/target/drogariacenter-$(date +%Y%m%d%H%M%S).jar.bak
+            fi
+          '
+          sshpass -p "$SSH_PASS" scp -o StrictHostKeyChecking=no target/drogariacenter.jar root@103.199.184.22:/var/www/drogariacenter/target/drogariacenter.jar
+          sshpass -p "$SSH_PASS" ssh -o StrictHostKeyChecking=no root@103.199.184.22 "systemctl restart drogariacenter && systemctl status drogariacenter --no-pager || true"
