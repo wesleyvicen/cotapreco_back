@@ -39,6 +39,8 @@ public class CotacaoController {
     }
     @PostMapping("/{id}/open") @PreAuthorize("hasAnyRole('ADMIN','BUYER')") public VisaoCotacao open(@PathVariable Long id) { return service.open(id); }
     @PostMapping("/{id}/close") @PreAuthorize("hasAnyRole('ADMIN','BUYER')") public VisaoCotacao close(@PathVariable Long id) { return service.close(id); }
+    @PutMapping("/{id}/expiration") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
+    public VisaoCotacao prorrogar(@PathVariable Long id, @Valid @RequestBody SolicitacaoProrrogacaoCotacao request) { return service.prorrogar(id, request); }
     @PutMapping("/{id}/items/{itemId}") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
     public VisaoItemCotacao atualizarItem(@PathVariable Long id, @PathVariable Long itemId, @Valid @RequestBody SolicitacaoAtualizacaoItemCotacao request) { return service.atualizarItem(id, itemId, request); }
     @GetMapping("/{id}/responses") public List<VisaoResposta> responses(@PathVariable Long id) { return service.responses(id); }

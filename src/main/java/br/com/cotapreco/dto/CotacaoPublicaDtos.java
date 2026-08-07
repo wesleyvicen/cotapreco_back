@@ -10,7 +10,7 @@ import java.util.List;
 public final class CotacaoPublicaDtos {
     private CotacaoPublicaDtos() {}
 
-    public record ItemCotacaoPublica(String ean, String nomeProduto, Integer quantidadeSolicitada) {}
+    public record ItemCotacaoPublica(String ean, String nomeProduto, String laboratorio, Integer quantidadeSolicitada) {}
     public record VisaoCotacaoPublica(String nomeEmpresa, String nomeCotacao, Instant expiraEm, int totalProdutos,
         boolean aceitaRespostas, List<ItemCotacaoPublica> itens) {}
 
@@ -21,7 +21,7 @@ public final class CotacaoPublicaDtos {
     public record ResumoRespostaPublica(Long id, String nomeDistribuidora, String documentoDistribuidora,
         StatusResposta status, Instant enviadoEm, Instant atualizadoEm, int totalItensCotados, BigDecimal valorTotal) {}
 
-    public record VisaoItemResposta(Long id, String ean, String nomeProduto, Integer quantidadeSolicitada,
+    public record VisaoItemResposta(Long id, String ean, String nomeProduto, String laboratorio, Integer quantidadeSolicitada,
         BigDecimal precoUnitario, Integer quantidadeDisponivel, boolean disponivel, String observacao) {}
 
     public record VisaoRespostaPublica(Long id, String nomeEmpresa, String nomeCotacao, String nomeRepresentante,

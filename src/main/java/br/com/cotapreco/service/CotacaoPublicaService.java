@@ -29,7 +29,7 @@ public class CotacaoPublicaService {
         List<ItemCotacao> itensAtivos = cotacao.getItens().stream().filter(ItemCotacao::isAtivo).toList();
         return new VisaoCotacaoPublica(cotacao.getEmpresa().getNome(), cotacao.getNome(), cotacao.getExpiraEm(),
             itensAtivos.size(), cotacao.podeReceberRespostas() && !itensAtivos.isEmpty(), itensAtivos.stream()
-                .map(item -> new ItemCotacaoPublica(item.getProduto().getEan(), item.getProduto().getNome(), item.getQuantidadeSolicitada())).toList());
+                .map(item -> new ItemCotacaoPublica(item.getProduto().getEan(), item.getProduto().getNome(), laboratorio(item), item.getQuantidadeSolicitada())).toList());
     }
 
     @Transactional(readOnly = true)
@@ -211,8 +211,9 @@ public class CotacaoPublicaService {
             resposta.getNomeRepresentante(), resposta.getNomeDistribuidora(), resposta.getDocumentoDistribuidora(), resposta.getStatus(),
             resposta.getCotacao().getExpiraEm(), resposta.isAtivo() && resposta.getCotacao().podeReceberRespostas() && resposta.getCotacao().getItens().stream().anyMatch(ItemCotacao::isAtivo), resposta.getItens().stream().filter(item -> item.getItemCotacao().isAtivo())
                 .map(item -> new VisaoItemResposta(item.getId(), item.getItemCotacao().getProduto().getEan(),
-                    item.getItemCotacao().getProduto().getNome(), item.getItemCotacao().getQuantidadeSolicitada(), item.getPrecoUnitario(),
+                    item.getItemCotacao().getProduto().getNome(), laboratorio(item.getItemCotacao()), item.getItemCotacao().getQuantidadeSolicitada(), item.getPrecoUnitario(),
                     item.getQuantidadeDisponivel(), item.isDisponivel(), item.getObservacao())).toList());
     }
+    private String laboratorio(ItemCotacao item) { return item.getLaboratorioSolicitado() != null ? item.getLaboratorioSolicitado() : item.getProduto().getLaboratorio(); }
     private String limpar(String valor) { return valor == null || valor.isBlank() ? null : valor.trim(); }
 }

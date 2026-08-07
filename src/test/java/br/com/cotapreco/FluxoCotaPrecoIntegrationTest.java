@@ -577,6 +577,60 @@ class FluxoCotaPrecoIntegrationTest {
     }
 
     @Test
+    void laboratorioSolicitadoEExibidoAoRepresentanteComFallbackParaCatalogo() throws Exception {
+        String autenticacao = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String conteudo = mapper.writeValueAsString(Map.of("name", "Cotação com laboratório", "items", List.of(
+            Map.of("ean", "7890000000099", "productName", "Produto solicitado", "quantity", 10, "laboratory", "Laboratório do comprador"))));
+        JsonNode rascunho = json(mvc.perform(post("/api/quotations").header("Authorization", autenticacao)
+            .contentType(MediaType.APPLICATION_JSON).content(conteudo)).andExpect(status().isOk()).andReturn());
+        JsonNode aberta = json(mvc.perform(post("/api/quotations/{id}/open", rascunho.get("id").asLong()).header("Authorization", autenticacao))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].laboratory").value("Laboratório do comprador")).andReturn());
+        String token = aberta.get("publicToken").asText();
+        mvc.perform(get("/api/publico/cotacoes/{token}", token)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.itens[0].laboratorio").value("Laboratório do comprador"));
+
+        String representante = cadastrarRepresentante(token, "Laboratório Rep", "81999993101", "laboratorio-rep@teste.local");
+        JsonNode proposta = criarProposta(token, representante, "Distribuidora Laboratório", null);
+        mvc.perform(get("/api/publico/cotacoes/{token}/respostas/{id}", token, proposta.get("id").asLong()).header("Authorization", representante))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.itens[0].laboratorio").value("Laboratório do comprador"));
+
+        String tokenLegado = criarEAbrirCotacao(autenticacao, "Cotação catálogo");
+        Long empresaId = usuarios.findByEmailIgnoreCase("admin@cotapreco.local").orElseThrow().getEmpresa().getId();
+        Produto produto = produtos.findByEmpresaIdAndEan(empresaId, "7890000000001").orElseThrow();
+        produto.setLaboratorio("Laboratório do catálogo");
+        produtos.save(produto);
+        mvc.perform(get("/api/publico/cotacoes/{token}", tokenLegado)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.itens[0].laboratorio").value("Laboratório do catálogo"));
+    }
+
+    @Test
+    void prorrogaCotacaoReabreFechadaEAumentaVersaoDoCompartilhamento() throws Exception {
+        String autenticacao = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String token = criarEAbrirCotacao(autenticacao, "Cotação prorrogável");
+        long cotacaoId = localizarCotacaoPorToken(token);
+        Instant primeiroPrazo = Instant.now().plusSeconds(3600);
+
+        mvc.perform(put("/api/quotations/{id}/expiration", cotacaoId).header("Authorization", autenticacao)
+            .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of("expiresAt", primeiroPrazo.toString()))))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OPEN"))
+            .andExpect(jsonPath("$.publicUrl").value(org.hamcrest.Matchers.containsString("?v=" + primeiroPrazo.toEpochMilli())));
+        mvc.perform(get("/api/publico/cotacoes/{token}/compartilhar", token))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("/compartilhar?v=" + primeiroPrazo.toEpochMilli())))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("/imagem-compartilhamento?v=" + primeiroPrazo.toEpochMilli())));
+
+        mvc.perform(post("/api/quotations/{id}/close", cotacaoId).header("Authorization", autenticacao)).andExpect(status().isOk());
+        Instant segundoPrazo = Instant.now().plusSeconds(7200);
+        mvc.perform(put("/api/quotations/{id}/expiration", cotacaoId).header("Authorization", autenticacao)
+            .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of("expiresAt", segundoPrazo.toString()))))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OPEN"));
+
+        mvc.perform(put("/api/quotations/{id}/expiration", cotacaoId).header("Authorization", autenticacao)
+            .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of("expiresAt", Instant.now().minusSeconds(60).toString()))))
+            .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
     void corsLiberaSomenteFrontendConfigurado() throws Exception {
         mvc.perform(options("/api/publico/representantes/login")
             .header("Origin", "http://localhost:5173")

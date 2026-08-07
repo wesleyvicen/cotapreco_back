@@ -49,8 +49,9 @@ public class CompartilhamentoCotacaoService {
         String titulo = "Cotação: " + cotacao.getNome();
         String descricao = farmacia + " está solicitando preços para " + cotacao.getItens().size() + " produtos. Acesse o link para responder.";
         String destino = frontend() + "/cotacao/responder/" + token;
-        String pagina = backend() + "/api/publico/cotacoes/" + token + "/compartilhar";
-        String imagem = backend() + "/api/publico/cotacoes/" + token + "/imagem-compartilhamento";
+        String versao = cotacao.getExpiraEm() == null ? "" : "?v=" + cotacao.getExpiraEm().toEpochMilli();
+        String pagina = backend() + "/api/publico/cotacoes/" + token + "/compartilhar" + versao;
+        String imagem = backend() + "/api/publico/cotacoes/" + token + "/imagem-compartilhamento" + versao;
         return """
             <!doctype html><html lang="pt-BR"><head><meta charset="UTF-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">

@@ -25,6 +25,7 @@ public final class CotacaoDtos {
         @Size(max = 160) String laboratory) {}
     public record SolicitacaoCriacaoCotacao(@NotBlank @Size(max = 180) String name, Instant expiresAt,
         @NotEmpty List<@Valid SolicitacaoItemCotacao> items) {}
+    public record SolicitacaoProrrogacaoCotacao(@NotNull Instant expiresAt) {}
     public record SolicitacaoAtualizacaoItemCotacao(@NotNull @Min(1) Integer quantity, boolean active) {}
     public record VisaoItemCotacao(Long id, Long productId, String ean, String productName, String laboratory, Integer requestedQuantity, boolean active) {}
     public record ResumoCotacao(Long id, String name, StatusCotacao status, Instant expiresAt, Instant createdAt,
