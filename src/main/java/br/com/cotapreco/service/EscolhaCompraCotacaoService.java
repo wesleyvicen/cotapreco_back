@@ -17,11 +17,13 @@ public class EscolhaCompraCotacaoService {
     private final EscolhaCompraCotacaoRepository repositorioEscolhas;
     private final UsuarioAtualService usuarioAtual;
     private final EstadoPedidoCompraService estadoPedidos;
+    private final HistoricoPlanoCompraService historico;
 
     @Transactional
     public VisaoEscolhaCompra escolher(Long cotacaoId, Long itemCotacaoId, SolicitacaoEscolhaCompra solicitacao) {
         Cotacao cotacao = buscarCotacao(cotacaoId);
         validarStatus(cotacao);
+        historico.preparar(cotacaoId);
         ItemCotacao itemCotacao = cotacao.getItens().stream().filter(i -> i.getId().equals(itemCotacaoId)).findFirst()
             .orElseThrow(() -> new RecursoNaoEncontradoException("Item da cotação não encontrado."));
         RespostaCotacao resposta = repositorioRespostas.findById(solicitacao.responseId())
@@ -42,6 +44,8 @@ public class EscolhaCompraCotacaoService {
         repositorioEscolhas.save(escolha);
         repositorioEscolhas.flush();
         estadoPedidos.invalidar(cotacaoId, usuarioAtual.companyId());
+        historico.registrar(cotacaoId, AcaoHistoricoPlano.TROCAR_DISTRIBUIDORA,
+            "Trocou a distribuidora de " + itemCotacao.getProduto().getNome());
         return new VisaoEscolhaCompra(itemCotacaoId, resposta.getId());
     }
 
@@ -49,6 +53,7 @@ public class EscolhaCompraCotacaoService {
     public void voltarAoAutomatico(Long cotacaoId, Long itemCotacaoId) {
         Cotacao cotacao = buscarCotacao(cotacaoId);
         validarStatus(cotacao);
+        historico.preparar(cotacaoId);
         if (cotacao.getItens().stream().noneMatch(i -> i.getId().equals(itemCotacaoId)))
             throw new RecursoNaoEncontradoException("Item da cotação não encontrado.");
         repositorioEscolhas.findByItemCotacaoId(itemCotacaoId).ifPresent(escolha -> {
@@ -57,6 +62,9 @@ public class EscolhaCompraCotacaoService {
         });
         repositorioEscolhas.flush();
         estadoPedidos.invalidar(cotacaoId, usuarioAtual.companyId());
+        ItemCotacao item=cotacao.getItens().stream().filter(i->i.getId().equals(itemCotacaoId)).findFirst().orElseThrow();
+        historico.registrar(cotacaoId, AcaoHistoricoPlano.VOLTAR_AO_AUTOMATICO,
+            "Restaurou o cálculo automático de " + item.getProduto().getNome());
     }
 
     private Cotacao buscarCotacao(Long id) {

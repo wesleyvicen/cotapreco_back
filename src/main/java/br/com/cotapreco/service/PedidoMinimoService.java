@@ -4,6 +4,7 @@ import br.com.cotapreco.dto.ComparacaoDtos.*;
 import br.com.cotapreco.dto.PedidoMinimoDtos.*;
 import br.com.cotapreco.dto.PlanoCompraDtos.*;
 import br.com.cotapreco.enums.StatusCotacao;
+import br.com.cotapreco.enums.AcaoHistoricoPlano;
 import br.com.cotapreco.exception.*;
 import br.com.cotapreco.model.*;
 import br.com.cotapreco.repository.*;
@@ -24,6 +25,7 @@ public class PedidoMinimoService {
     private final ComparacaoCotacaoService comparacao;
     private final PlanoCompraService planoCompra;
     private final EstadoPedidoCompraService estadoPedidos;
+    private final HistoricoPlanoCompraService historico;
     private final UsuarioAtualService usuarioAtual;
 
     @Transactional(readOnly = true)
@@ -43,16 +45,19 @@ public class PedidoMinimoService {
             if (!calculo.atingirMinimo().opcao().feasible())
                 throw new RegraNegocioException("Não há estoque suficiente nas ofertas para atingir o valor mínimo.");
             VisaoComparacao atualizada = planoCompra.atualizar(cotacaoId,
-                new SolicitacaoPlanoCompra(calculo.atingirMinimo().plano().stream().map(Plano::dto).toList()));
+                new SolicitacaoPlanoCompra(calculo.atingirMinimo().plano().stream().map(Plano::dto).toList()),
+                AcaoHistoricoPlano.ATINGIR_MINIMO,"Ajustou o pedido de "+contexto.resposta().getNomeDistribuidora()+" para atingir o mínimo");
             return new ResultadoAplicacaoPedidoMinimo("Plano ajustado para atender o valor mínimo.", atualizada);
         }
         if (!calculo.repassar().opcao().feasible())
             throw new RegraNegocioException("Não é possível repassar o pedido inteiro sem deixar produtos descobertos.");
+        historico.preparar(cotacaoId);
         contexto.resposta().setIncluidaCompraSugerida(false);
         respostas.saveAndFlush(contexto.resposta());
         estadoPedidos.invalidar(cotacaoId, usuarioAtual.companyId());
         return new ResultadoAplicacaoPedidoMinimo("Pedido repassado para as próximas ofertas.",
-            comparacao.compare(cotacaoId, usuarioAtual.companyId()));
+            historico.registrar(cotacaoId,AcaoHistoricoPlano.REPASSAR_PEDIDO,
+                "Repassou o pedido de "+contexto.resposta().getNomeDistribuidora()+" para outras distribuidoras"));
     }
 
     @Transactional
@@ -63,10 +68,12 @@ public class PedidoMinimoService {
             return aplicar(cotacaoId, respostaId,
                 new SolicitacaoAplicacaoPedidoMinimo(EstrategiaPedidoMinimo.REPASSAR_PEDIDO)).comparison();
         }
+        historico.preparar(cotacaoId);
         contexto.resposta().setIncluidaCompraSugerida(true);
         respostas.saveAndFlush(contexto.resposta());
         estadoPedidos.invalidar(cotacaoId, usuarioAtual.companyId());
-        return comparacao.compare(cotacaoId, usuarioAtual.companyId());
+        return historico.registrar(cotacaoId,AcaoHistoricoPlano.REINCLUIR_DISTRIBUIDORA,
+            "Reincluiu "+contexto.resposta().getNomeDistribuidora()+" na compra sugerida");
     }
 
     private CalculoOpcoes calcularOpcoes(Contexto contexto) {

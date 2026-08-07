@@ -775,6 +775,71 @@ class FluxoCotaPrecoIntegrationTest {
     }
 
     @Test
+    void historicoDesfazRepasseERestauraExatamentePlanoAnterior() throws Exception {
+        String farmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String token = criarEAbrirCotacao(farmacia, "Cotação histórico do repasse");
+        String representante = cadastrarRepresentante(token, "Histórico Repasse", "81999993206", "historico-repasse@teste.local");
+        JsonNode barata = criarProposta(token, representante, "Distribuidora Barata", null);
+        JsonNode alternativa = criarProposta(token, representante, "Distribuidora Alternativa", null);
+        long barataId=barata.get("id").asLong();
+        atualizarEEnviar(token,barataId,representante,respostaJsonMinimo("Distribuidora Barata",null,5000,
+            itemDisponivel(barata.at("/itens/0/id").asLong(),5,100,null),itemDisponivel(barata.at("/itens/1/id").asLong(),5,50,null)));
+        atualizarEEnviar(token,alternativa.get("id").asLong(),representante,respostaJsonMinimo("Distribuidora Alternativa",null,null,
+            itemDisponivel(alternativa.at("/itens/0/id").asLong(),6,100,null),itemDisponivel(alternativa.at("/itens/1/id").asLong(),6,50,null)));
+        long cotacaoId=localizarCotacaoPorToken(token);
+        mvc.perform(post("/api/quotations/{id}/close",cotacaoId).header("Authorization",farmacia)).andExpect(status().isOk());
+        mvc.perform(post("/api/quotations/{id}/minimum-order-options/{responseId}/apply",cotacaoId,barataId)
+            .header("Authorization",farmacia).contentType(MediaType.APPLICATION_JSON).content("{\"strategy\":\"REPASSAR_PEDIDO\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.comparison.suggestedPurchase[0].supplierName").value("Distribuidora Alternativa"));
+        mvc.perform(get("/api/quotations/{id}/purchase-plan/history",cotacaoId).header("Authorization",farmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.canUndo").value(true))
+            .andExpect(jsonPath("$.versions.length()").value(2)).andExpect(jsonPath("$.versions[0].action").value("REPASSAR_PEDIDO"));
+        mvc.perform(post("/api/quotations/{id}/purchase-plan/undo",cotacaoId).header("Authorization",farmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.comparison.suggestedPurchase[0].supplierName").value("Distribuidora Barata"))
+            .andExpect(jsonPath("$.comparison.supplierTotals[0].includedInSuggestedPurchase").value(true))
+            .andExpect(jsonPath("$.history.versions.length()").value(3))
+            .andExpect(jsonPath("$.history.versions[0].action").value("RESTAURAR_VERSAO"));
+    }
+
+    @Test
+    void previaManualNaoPersisteEProtegeContraVersaoDesatualizada() throws Exception {
+        String farmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String token = criarEAbrirCotacao(farmacia, "Cotação prévia manual");
+        String representante = cadastrarRepresentante(token, "Prévia Manual", "81999993207", "previa-manual@teste.local");
+        JsonNode proposta = criarProposta(token,representante,"Distribuidora Manual",null);
+        long respostaId=proposta.get("id").asLong();
+        atualizarEEnviar(token,respostaId,representante,respostaJsonMinimo("Distribuidora Manual",null,1200,
+            itemDisponivel(proposta.at("/itens/0/id").asLong(),10,150,"Estoque para atender pedido mínimo"),itemIndisponivel(proposta.at("/itens/1/id").asLong())));
+        long cotacaoId=localizarCotacaoPorToken(token);
+        mvc.perform(post("/api/quotations/{id}/close",cotacaoId).header("Authorization",farmacia)).andExpect(status().isOk());
+        JsonNode comparacao=json(mvc.perform(get("/api/quotations/{id}/comparison",cotacaoId).header("Authorization",farmacia))
+            .andExpect(status().isOk()).andReturn());
+        long primeiro=comparacao.at("/products/0/quotationItemId").asLong(),segundo=comparacao.at("/products/1/quotationItemId").asLong();
+        String plano=mapper.writeValueAsString(Map.of("baseVersionId",0,"items",List.of(
+            itemPlano(primeiro,120,respostaId,120,null,true),itemPlano(segundo,50,null,null,null,false))));
+        mvc.perform(post("/api/quotations/{id}/minimum-order-options/{responseId}/manual-preview",cotacaoId,respostaId)
+            .header("Authorization",farmacia).contentType(MediaType.APPLICATION_JSON).content(plano))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.supplierTotal").value(1200))
+            .andExpect(jsonPath("$.extraUnits").value(20)).andExpect(jsonPath("$.comparison.products[0].desiredQuantity").value(120));
+        mvc.perform(get("/api/quotations/{id}/comparison",cotacaoId).header("Authorization",farmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.products[0].desiredQuantity").value(100));
+        mvc.perform(get("/api/quotations/{id}/purchase-plan/history",cotacaoId).header("Authorization",farmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.versions.length()").value(0));
+        mvc.perform(put("/api/quotations/{id}/purchase-plan",cotacaoId).header("Authorization",farmacia)
+            .contentType(MediaType.APPLICATION_JSON).content(plano)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.products[0].desiredQuantity").value(120));
+        JsonNode historico=json(mvc.perform(get("/api/quotations/{id}/purchase-plan/history",cotacaoId).header("Authorization",farmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.versions.length()").value(2)).andReturn());
+        mvc.perform(put("/api/quotations/{id}/purchase-plan",cotacaoId).header("Authorization",farmacia)
+            .contentType(MediaType.APPLICATION_JSON).content(plano)).andExpect(status().isConflict());
+        long versaoInicial=historico.at("/versions/1/id").asLong();
+        mvc.perform(post("/api/quotations/{id}/purchase-plan/versions/{versionId}/restore",cotacaoId,versaoInicial)
+            .header("Authorization",farmacia)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.comparison.products[0].desiredQuantity").value(100))
+            .andExpect(jsonPath("$.history.versions.length()").value(3));
+    }
+
+    @Test
     void corsLiberaSomenteFrontendConfigurado() throws Exception {
         mvc.perform(options("/api/publico/representantes/login")
             .header("Origin", "http://localhost:5173")

@@ -4,6 +4,7 @@ import br.com.cotapreco.dto.ComparacaoDtos.VisaoComparacao;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.util.List;
+import br.com.cotapreco.enums.StatusPedidoMinimo;
 
 public final class PedidoMinimoDtos {
     private PedidoMinimoDtos() {}
@@ -26,4 +27,7 @@ public final class PedidoMinimoDtos {
     public record SolicitacaoAplicacaoPedidoMinimo(@NotNull EstrategiaPedidoMinimo strategy) {}
     public record SolicitacaoInclusaoCompra(boolean included) {}
     public record ResultadoAplicacaoPedidoMinimo(String message, VisaoComparacao comparison) {}
+    public record PreviaManualPedidoMinimo(VisaoComparacao comparison,Long responseId,BigDecimal supplierTotal,
+        BigDecimal minimumOrderValue,BigDecimal shortfall,StatusPedidoMinimo minimumOrderStatus,
+        BigDecimal purchaseIncrease,int extraUnits,int uncoveredUnits,long baseVersionId) {}
 }

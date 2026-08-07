@@ -1,0 +1,12 @@
+package br.com.cotapreco.enums;
+
+public enum AcaoHistoricoPlano {
+    ESTADO_INICIAL,
+    ATINGIR_MINIMO,
+    REPASSAR_PEDIDO,
+    REINCLUIR_DISTRIBUIDORA,
+    TROCAR_DISTRIBUIDORA,
+    VOLTAR_AO_AUTOMATICO,
+    AJUSTAR_PLANO,
+    RESTAURAR_VERSAO
+}
