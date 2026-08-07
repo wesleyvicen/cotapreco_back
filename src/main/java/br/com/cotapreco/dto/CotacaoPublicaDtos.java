@@ -35,5 +35,6 @@ public final class CotacaoPublicaDtos {
     public record SolicitacaoAtualizacaoResposta(
         @NotBlank @Size(max = 160) String nomeDistribuidora,
         @Size(max = 20) String documentoDistribuidora,
-        @NotEmpty List<@Valid AtualizacaoItemResposta> itens) {}
+        @NotEmpty List<@Valid AtualizacaoItemResposta> itens,
+        boolean autoSave) {}
 }

@@ -105,7 +105,7 @@ public class CotacaoPublicaService {
             }
         }
         if (ativosRecebidos.size() != totalItensAtivos) throw new RegraNegocioException("Envie todos os produtos ativos da resposta.");
-        if (!erros.isEmpty()) throw new ErroValidacaoNegocioException("Corrija os produtos destacados para continuar.", erros);
+        if (!solicitacao.autoSave() && !erros.isEmpty()) throw new ErroValidacaoNegocioException("Corrija os produtos destacados para continuar.", erros);
         for (AtualizacaoItemResposta entrada : solicitacao.itens()) {
             ItemRespostaCotacao item = itensDaResposta.get(entrada.id());
             if (!item.getItemCotacao().isAtivo()) continue;
