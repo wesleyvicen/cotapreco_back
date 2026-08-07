@@ -39,5 +39,6 @@ app:
     secret: ${JWT_SECRET:cotapreco-local-secret-change-me-please-32-characters}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:480}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  frontend-public-url: ${FRONTEND_PUBLIC_URL:${FRONTEND_URL:http://localhost:5173}}
   email:
     remetente: ${EMAIL_REMETENTE:CotaPreco <nao-responda@cotapreco.local>}

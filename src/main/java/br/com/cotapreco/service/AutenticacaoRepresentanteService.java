@@ -28,7 +28,7 @@ public class AutenticacaoRepresentanteService {
     private final ServicoJwt servicoJwt;
     private final GeradorToken geradorToken;
     private final EnvioEmailService envioEmailService;
-    @Value("${app.frontend-url}") private String urlFrontend;
+    @Value("${app.frontend-public-url}") private String urlFrontend;
 
     @Transactional
     public RespostaAutenticacaoRepresentante cadastrar(SolicitacaoCadastroRepresentante solicitacao) {
@@ -71,12 +71,13 @@ public class AutenticacaoRepresentanteService {
     public MensagemRepresentante solicitarRedefinicao(SolicitacaoEsqueciSenha solicitacao) {
         repositorio.findByEmailIgnoreCase(normalizarEmail(solicitacao.email())).filter(Representante::isAtivo).ifPresent(representante -> {
             String token = geradorToken.generate();
+            repositorioTokens.deleteByRepresentanteId(representante.getId());
             TokenRedefinicaoSenhaRepresentante registro = new TokenRedefinicaoSenhaRepresentante();
             registro.setRepresentante(representante);
             registro.setTokenHash(hash(token));
             registro.setExpiraEm(Instant.now().plus(30, ChronoUnit.MINUTES));
             repositorioTokens.save(registro);
-            String link = urlFrontend + "/representante/redefinir-senha?token=" + token;
+            String link = baseUrlFrontend() + "/representante/redefinir-senha?token=" + token;
             envioEmailService.enviarRedefinicaoSenhaRepresentante(representante.getEmail(), representante.getNome(), link);
         });
         return new MensagemRepresentante("Se o e-mail estiver cadastrado, enviaremos as instruções para redefinir a senha.");
@@ -93,6 +94,19 @@ public class AutenticacaoRepresentanteService {
         representante.setVersaoAutenticacao(representante.getVersaoAutenticacao() + 1);
         registro.setUtilizadoEm(Instant.now());
         return new MensagemRepresentante("Senha redefinida com sucesso. Você já pode entrar.");
+    }
+
+    @Transactional
+    public MensagemRepresentante alterarSenha(Representante representante, SolicitacaoAlteracaoSenhaRepresentante solicitacao) {
+        if (!codificadorSenha.matches(solicitacao.senhaAtual(), representante.getSenhaHash()))
+            throw new RegraNegocioException("A senha atual está incorreta.");
+        validarSenha(solicitacao.novaSenha());
+        if (codificadorSenha.matches(solicitacao.novaSenha(), representante.getSenhaHash()))
+            throw new RegraNegocioException("A nova senha deve ser diferente da senha atual.");
+        representante.setSenhaHash(codificadorSenha.encode(solicitacao.novaSenha()));
+        representante.setVersaoAutenticacao(representante.getVersaoAutenticacao() + 1);
+        repositorio.save(representante);
+        return new MensagemRepresentante("Senha alterada com sucesso. Entre novamente para continuar.");
     }
 
     public static String normalizarTelefone(String valor) {
@@ -114,4 +128,5 @@ public class AutenticacaoRepresentanteService {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(valor.getBytes(StandardCharsets.UTF_8))); }
         catch (Exception ex) { throw new IllegalStateException("Não foi possível proteger o token.", ex); }
     }
+    private String baseUrlFrontend() { return urlFrontend.replaceAll("/+$", ""); }
 }

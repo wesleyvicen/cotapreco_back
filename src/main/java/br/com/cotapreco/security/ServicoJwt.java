@@ -22,6 +22,7 @@ public class ServicoJwt {
     public String generate(Usuario user) {
         Instant now = Instant.now();
         return Jwts.builder().subject(user.getEmail()).claim("role", user.getPerfil().name()).claim("tipo", "FARMACIA")
+            .claim("versao", user.getVersaoAutenticacao())
             .issuedAt(Date.from(now)).expiration(Date.from(now.plus(expirationMinutes, java.time.temporal.ChronoUnit.MINUTES)))
             .signWith(key).compact();
     }

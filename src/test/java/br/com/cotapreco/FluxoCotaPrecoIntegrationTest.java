@@ -33,6 +33,7 @@ class FluxoCotaPrecoIntegrationTest {
     @Autowired ProdutoRepository produtos;
     @Autowired RepresentanteRepository representantes;
     @Autowired TokenRedefinicaoSenhaRepresentanteRepository tokensRedefinicao;
+    @Autowired TokenRedefinicaoSenhaUsuarioRepository tokensRedefinicaoUsuarios;
     @Autowired PasswordEncoder codificador;
 
     @Test
@@ -416,6 +417,24 @@ class FluxoCotaPrecoIntegrationTest {
     }
 
     @Test
+    void representantePodeAlterarAPropriaSenhaEInvalidaSessaoAnterior() throws Exception {
+        String autenticacaoFarmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String tokenCotacao = criarEAbrirCotacao(autenticacaoFarmacia, "Cotação para alterar senha");
+        String sessaoAnterior = cadastrarRepresentante(tokenCotacao, "Lara Alves", "81999994002", "lara4002@teste.local");
+
+        mvc.perform(put("/api/publico/representantes/senha").header("Authorization", sessaoAnterior).contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("senhaAtual", "SenhaErrada123", "novaSenha", "NovaSenha456"))))
+            .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.message").value("A senha atual está incorreta."));
+        mvc.perform(put("/api/publico/representantes/senha").header("Authorization", sessaoAnterior).contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("senhaAtual", "Senha123", "novaSenha", "NovaSenha456"))))
+            .andExpect(status().isOk());
+        mvc.perform(get("/api/publico/representantes/eu").header("Authorization", sessaoAnterior)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/publico/representantes/login").contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("telefone", "81999994002", "senha", "NovaSenha456"))))
+            .andExpect(status().isOk());
+    }
+
+    @Test
     void desativaProdutoERespostaSemApagarHistoricoDaCotacao() throws Exception {
         String autenticacaoFarmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
         String tokenCotacao = criarEAbrirCotacao(autenticacaoFarmacia, "Cotação com exclusões");
@@ -498,6 +517,37 @@ class FluxoCotaPrecoIntegrationTest {
             .content(mapper.writeValueAsString(Map.of("telefone", "81999994001", "senha", "NovaSenha456"))))
             .andExpect(status().isOk());
         mvc.perform(post("/api/publico/representantes/redefinir-senha").contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("token", tokenAberto, "novaSenha", "OutraSenha789"))))
+            .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void usuarioPodeRedefinirSenhaComTokenDeUsoUnicoEInvalidaSessaoAnterior() throws Exception {
+        Usuario administrador = usuarios.findByEmailIgnoreCase("admin@cotapreco.local").orElseThrow();
+        String email = "recuperacao-" + UUID.randomUUID() + "@teste.local";
+        Usuario usuario = new Usuario();
+        usuario.setEmpresa(administrador.getEmpresa());
+        usuario.setNome("Usuário em recuperação");
+        usuario.setEmail(email);
+        usuario.setSenhaHash(codificador.encode("SenhaAntiga123"));
+        usuario.setPerfil(PerfilUsuario.BUYER);
+        usuarios.save(usuario);
+        String sessaoAnterior = loginFarmacia(email, "SenhaAntiga123");
+        String tokenAberto = "token-usuario-redefinicao-para-o-teste";
+        TokenRedefinicaoSenhaUsuario registro = new TokenRedefinicaoSenhaUsuario();
+        registro.setUsuario(usuario);
+        registro.setTokenHash(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(tokenAberto.getBytes(StandardCharsets.UTF_8))));
+        registro.setExpiraEm(Instant.now().plusSeconds(600));
+        tokensRedefinicaoUsuarios.save(registro);
+
+        mvc.perform(post("/api/auth/redefinir-senha").contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("token", tokenAberto, "novaSenha", "NovaSenha456"))))
+            .andExpect(status().isOk());
+        mvc.perform(get("/api/auth/me").header("Authorization", sessaoAnterior)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("email", email, "password", "NovaSenha456"))))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/auth/redefinir-senha").contentType(MediaType.APPLICATION_JSON)
             .content(mapper.writeValueAsString(Map.of("token", tokenAberto, "novaSenha", "OutraSenha789"))))
             .andExpect(status().isUnprocessableEntity());
     }

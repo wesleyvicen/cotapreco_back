@@ -21,6 +21,11 @@ public final class AutenticacaoDtos {
     public record SolicitacaoAlteracaoSenha(
         @NotBlank String senhaAtual,
         @NotBlank @Size(min = 8, max = 72) String novaSenha) {}
+    public record SolicitacaoEsqueciSenha(@NotBlank @Email @Size(max = 180) String email) {}
+    public record SolicitacaoRedefinicaoSenha(
+        @NotBlank String token,
+        @NotBlank @Size(min = 8, max = 72) String novaSenha) {}
+    public record RespostaMensagem(String mensagem) {}
     public record VisaoUsuario(Long id, String name, String email, PerfilUsuario role, Long companyId, String companyName) {}
     public record VisaoUsuarioAdministracao(Long id, String name, String email, PerfilUsuario role, boolean active, Instant createdAt) {}
     public record RespostaLogin(String token, String tokenType, long expiresIn, VisaoUsuario user) {}

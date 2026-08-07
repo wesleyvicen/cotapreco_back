@@ -6,4 +6,5 @@ import java.util.Optional;
 
 public interface TokenRedefinicaoSenhaRepresentanteRepository extends JpaRepository<TokenRedefinicaoSenhaRepresentante, Long> {
     Optional<TokenRedefinicaoSenhaRepresentante> findByTokenHash(String tokenHash);
+    long deleteByRepresentanteId(Long representanteId);
 }

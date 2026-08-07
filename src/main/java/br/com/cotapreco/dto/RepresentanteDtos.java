@@ -20,5 +20,8 @@ public final class RepresentanteDtos {
     public record RespostaAutenticacaoRepresentante(String token, String tipoToken, long expiraEmSegundos, VisaoRepresentante representante) {}
     public record SolicitacaoEsqueciSenha(@NotBlank @Email @Size(max = 180) String email) {}
     public record SolicitacaoRedefinicaoSenha(@NotBlank String token, @NotBlank @Size(max = 72) String novaSenha) {}
+    public record SolicitacaoAlteracaoSenhaRepresentante(
+        @NotBlank String senhaAtual,
+        @NotBlank @Size(max = 72) String novaSenha) {}
     public record MensagemRepresentante(String mensagem) {}
 }

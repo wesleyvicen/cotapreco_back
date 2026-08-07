@@ -18,5 +18,6 @@ public class RepresentanteController {
     @PostMapping("/login") public RespostaAutenticacaoRepresentante entrar(@Valid @RequestBody SolicitacaoLoginRepresentante solicitacao) { return servico.entrar(solicitacao); }
     @PostMapping("/esqueci-senha") public MensagemRepresentante esqueciSenha(@Valid @RequestBody SolicitacaoEsqueciSenha solicitacao) { return servico.solicitarRedefinicao(solicitacao); }
     @PostMapping("/redefinir-senha") public MensagemRepresentante redefinirSenha(@Valid @RequestBody SolicitacaoRedefinicaoSenha solicitacao) { return servico.redefinirSenha(solicitacao); }
+    @PutMapping("/senha") public MensagemRepresentante alterarSenha(@Valid @RequestBody SolicitacaoAlteracaoSenhaRepresentante solicitacao) { return servico.alterarSenha(representanteAtual.obter(), solicitacao); }
     @GetMapping("/eu") public VisaoRepresentante eu() { return servico.visualizar(representanteAtual.obter()); }
 }

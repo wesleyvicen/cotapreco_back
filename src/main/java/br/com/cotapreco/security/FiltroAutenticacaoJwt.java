@@ -32,7 +32,7 @@ public class FiltroAutenticacaoJwt extends OncePerRequestFilter {
 
     private void autenticarUsuarioFarmacia(String token) {
         userRepository.findByEmailIgnoreCase(jwtService.extractSubject(token))
-            .filter(u -> u.isAtivo() && u.getEmpresa().isAtivo()).ifPresent(user -> {
+            .filter(u -> u.isAtivo() && u.getEmpresa().isAtivo() && u.getVersaoAutenticacao() == jwtService.extrairVersao(token)).ifPresent(user -> {
                 var authority = new SimpleGrantedAuthority("ROLE_" + user.getPerfil().name());
                 SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user.getEmail(), null, List.of(authority)));
             });
