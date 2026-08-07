@@ -107,8 +107,8 @@ public class AutenticacaoRepresentanteService {
     }
     private String normalizarEmail(String valor) { return valor.trim().toLowerCase(Locale.ROOT); }
     private void validarSenha(String senha) {
-        if (senha == null || senha.length() < 8 || senha.length() > 72 || !senha.matches(".*[A-Za-zÀ-ÿ].*") || !senha.matches(".*\\d.*"))
-            throw new RegraNegocioException("A senha deve ter entre 8 e 72 caracteres, com pelo menos uma letra e um número.");
+        if (senha == null || senha.isBlank() || senha.length() > 72)
+            throw new RegraNegocioException("Informe uma senha de até 72 caracteres.");
     }
     private String hash(String valor) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(valor.getBytes(StandardCharsets.UTF_8))); }

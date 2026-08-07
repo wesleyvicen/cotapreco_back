@@ -391,13 +391,28 @@ class FluxoCotaPrecoIntegrationTest {
     void loginDoRepresentanteNormalizaTelefoneERecuperacaoNaoRevelaConta() throws Exception {
         String autenticacaoFarmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
         String tokenCotacao = criarEAbrirCotacao(autenticacaoFarmacia, "Cotação para login");
-        cadastrarRepresentante(tokenCotacao, "Carla Mendes", "81 99999-2001", "carla2001@teste.local");
+        String sufixo = UUID.randomUUID().toString();
+        String telefone = ("81" + sufixo.replaceAll("\\D", "") + "000000000").substring(0, 11);
+        cadastrarRepresentante(tokenCotacao, "Carla Mendes", telefone, "carla-" + sufixo + "@teste.local");
         mvc.perform(post("/api/publico/representantes/login").contentType(MediaType.APPLICATION_JSON)
-            .content(mapper.writeValueAsString(Map.of("telefone", "+55 (81) 99999-2001", "senha", "Senha123"))))
+            .content(mapper.writeValueAsString(Map.of("telefone", "+55 " + telefone, "senha", "Senha123"))))
             .andExpect(status().isOk()).andExpect(jsonPath("$.representante.nome").value("Carla Mendes"));
         mvc.perform(post("/api/publico/representantes/esqueci-senha").contentType(MediaType.APPLICATION_JSON)
             .content(mapper.writeValueAsString(Map.of("email", "inexistente@teste.local"))))
             .andExpect(status().isOk()).andExpect(jsonPath("$.mensagem").exists());
+    }
+
+    @Test
+    void representantePodeUsarSenhaComUmUnicoCaractere() throws Exception {
+        String autenticacaoFarmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String tokenCotacao = criarEAbrirCotacao(autenticacaoFarmacia, "Cotação com senha simples");
+        mvc.perform(post("/api/publico/representantes/cadastro").contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("tokenCotacao", tokenCotacao, "nome", "Senha Simples", "telefone", "81999992001",
+                "email", "senha-simples@teste.local", "senha", "1"))))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/publico/representantes/login").contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("telefone", "81999992001", "senha", "1"))))
+            .andExpect(status().isOk());
     }
 
     @Test
