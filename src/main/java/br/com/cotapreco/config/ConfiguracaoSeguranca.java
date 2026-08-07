@@ -25,7 +25,7 @@ public class ConfiguracaoSeguranca {
         return http.csrf(c -> c.disable()).cors(c -> {}).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
             .authorizeHttpRequests(a -> a.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/auth/login", "/error").permitAll()
+                .requestMatchers("/api/auth/login", "/api/auth/register", "/error").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/publico/representantes/cadastro", "/api/publico/representantes/login",
                     "/api/publico/representantes/esqueci-senha", "/api/publico/representantes/redefinir-senha").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/publico/cotacoes/*", "/api/publico/cotacoes/*/compartilhar", "/api/publico/cotacoes/*/imagem-compartilhamento").permitAll()

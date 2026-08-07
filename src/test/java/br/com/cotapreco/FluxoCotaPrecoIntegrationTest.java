@@ -491,6 +491,24 @@ class FluxoCotaPrecoIntegrationTest {
             .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
     }
 
+    @Test
+    void cadastraFarmaciaComAdministradorECriaUsuarioDaEquipe() throws Exception {
+        String sufixo = UUID.randomUUID().toString().replaceAll("\\D", "");
+        String cnpj = ("99" + sufixo + "00000000000000").substring(0, 14);
+        JsonNode cadastro = json(mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("nomeUsuario", "Nova Administradora", "nomeFarmacia", "Farmácia Nova", "cnpj", cnpj,
+                "email", "admin-" + UUID.randomUUID() + "@teste.local", "senha", "Senha@123"))))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.user.role").value("ADMIN"))
+            .andExpect(jsonPath("$.user.companyName").value("Farmácia Nova")).andReturn());
+        String autenticacao = "Bearer " + cadastro.get("token").asText();
+        mvc.perform(get("/api/users").header("Authorization", autenticacao))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(post("/api/users").header("Authorization", autenticacao).contentType(MediaType.APPLICATION_JSON)
+            .content(mapper.writeValueAsString(Map.of("nome", "Comprador da Nova", "email", "comprador-" + UUID.randomUUID() + "@teste.local",
+                "senha", "Senha@123", "perfil", "BUYER"))))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("BUYER"));
+    }
+
     private String criarEAbrirCotacao(String autenticacao, String nome) throws Exception {
         MockMultipartFile csv = new MockMultipartFile("file", "compras.csv", "text/csv",
             "ean,produto,quantidade\n7890000000001,Dipirona 500mg,100\n7890000000002,Paracetamol 750mg,50\n".getBytes(StandardCharsets.UTF_8));
