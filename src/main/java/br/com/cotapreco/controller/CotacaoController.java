@@ -39,7 +39,11 @@ public class CotacaoController {
     }
     @PostMapping("/{id}/open") @PreAuthorize("hasAnyRole('ADMIN','BUYER')") public VisaoCotacao open(@PathVariable Long id) { return service.open(id); }
     @PostMapping("/{id}/close") @PreAuthorize("hasAnyRole('ADMIN','BUYER')") public VisaoCotacao close(@PathVariable Long id) { return service.close(id); }
+    @PutMapping("/{id}/items/{itemId}") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
+    public VisaoItemCotacao atualizarItem(@PathVariable Long id, @PathVariable Long itemId, @Valid @RequestBody SolicitacaoAtualizacaoItemCotacao request) { return service.atualizarItem(id, itemId, request); }
     @GetMapping("/{id}/responses") public List<VisaoResposta> responses(@PathVariable Long id) { return service.responses(id); }
+    @PutMapping("/{id}/responses/{responseId}/active") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
+    public VisaoResposta atualizarRespostaAtiva(@PathVariable Long id, @PathVariable Long responseId, @RequestBody SolicitacaoAtivacaoResposta request) { return service.atualizarRespostaAtiva(id, responseId, request); }
     @GetMapping("/{id}/comparison") public VisaoComparacao comparison(@PathVariable Long id) { return comparisonService.compare(id, currentUser.companyId()); }
     @PutMapping("/{id}/purchase-selections/{itemId}") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
     public VisaoEscolhaCompra choosePurchase(@PathVariable Long id, @PathVariable Long itemId, @Valid @RequestBody SolicitacaoEscolhaCompra request) {

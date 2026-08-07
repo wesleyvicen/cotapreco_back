@@ -10,4 +10,5 @@ public class ItemCotacao {
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "cotacao_id") private Cotacao cotacao;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "produto_id") private Produto produto;
     @Column(name = "quantidade_solicitada", nullable = false) private Integer quantidadeSolicitada;
+    @Column(name = "ativo", nullable = false) private boolean ativo = true;
 }

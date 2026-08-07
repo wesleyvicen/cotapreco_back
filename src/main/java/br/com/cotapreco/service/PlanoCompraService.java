@@ -22,11 +22,11 @@ public class PlanoCompraService {
         Long empresaId=usuarioAtual.companyId();Cotacao cotacao=cotacoes.findByEmpresaIdAndId(empresaId,cotacaoId)
             .orElseThrow(()->new RecursoNaoEncontradoException("Cotação não encontrada."));
         if(cotacao.getStatus()!=StatusCotacao.CLOSED)throw new RegraNegocioException("As quantidades finais só podem ser alteradas com a cotação fechada.");
-        Map<Long,ItemCotacao> itens=cotacao.getItens().stream().collect(Collectors.toMap(ItemCotacao::getId,Function.identity()));
+        Map<Long,ItemCotacao> itens=cotacao.getItens().stream().filter(ItemCotacao::isAtivo).collect(Collectors.toMap(ItemCotacao::getId,Function.identity()));
         if(solicitacao.items().size()!=itens.size()||solicitacao.items().stream().map(ItemPlanoCompra::quotationItemId).distinct().count()!=itens.size())
             throw new RegraNegocioException("Envie todos os itens da cotação uma única vez.");
         Map<Long,RespostaCotacao> porResposta=respostas.findAllByCotacaoEmpresaIdAndCotacaoIdOrderByCriadoEm(empresaId,cotacaoId).stream()
-            .filter(r->r.getStatus()==StatusResposta.SUBMITTED).collect(Collectors.toMap(RespostaCotacao::getId,Function.identity()));
+            .filter(r->r.isAtivo()&&r.getStatus()==StatusResposta.SUBMITTED).collect(Collectors.toMap(RespostaCotacao::getId,Function.identity()));
         Map<String,String> erros=new LinkedHashMap<>();
         for(ItemPlanoCompra entrada:solicitacao.items()){
             ItemCotacao item=itens.get(entrada.quotationItemId());String prefixo="itens."+entrada.quotationItemId()+".";

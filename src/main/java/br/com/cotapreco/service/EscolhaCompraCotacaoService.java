@@ -26,7 +26,7 @@ public class EscolhaCompraCotacaoService {
             .orElseThrow(() -> new RecursoNaoEncontradoException("Item da cotação não encontrado."));
         RespostaCotacao resposta = repositorioRespostas.findById(solicitacao.responseId())
             .orElseThrow(() -> new RecursoNaoEncontradoException("Resposta não encontrada."));
-        if (!resposta.getCotacao().getId().equals(cotacaoId) || resposta.getStatus() != StatusResposta.SUBMITTED)
+        if (!resposta.getCotacao().getId().equals(cotacaoId) || !resposta.isAtivo() || resposta.getStatus() != StatusResposta.SUBMITTED)
             throw new RegraNegocioException("Selecione uma resposta enviada desta cotação.");
         ItemRespostaCotacao itemResposta = resposta.getItens().stream()
             .filter(i -> i.getItemCotacao().getId().equals(itemCotacaoId)).findFirst()

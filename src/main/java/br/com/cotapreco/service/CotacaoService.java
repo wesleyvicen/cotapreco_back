@@ -24,6 +24,7 @@ public class CotacaoService {
     private final CotacaoRepository repository; private final ProdutoRepository productRepository;
     private final RespostaCotacaoRepository responseRepository; private final UsuarioAtualService currentUser;
     private final PedidoCompraRepository purchaseOrderRepository;
+    private final EstadoPedidoCompraService estadoPedidos;
     private final LeitorArquivoImportacao parser; private final GeradorToken tokenGenerator;
     private final ComparacaoCotacaoService comparisonService;
     @Value("${app.share-public-url:${app.backend-public-url}}") private String urlPublicaCompartilhamento;
@@ -97,9 +98,37 @@ public class CotacaoService {
 
     @Transactional(readOnly = true) public List<ResumoCotacao> list() { Long companyId = currentUser.companyId(); return repository.findAllByEmpresaIdOrderByCriadoEmDesc(companyId).stream().map(this::listView).toList(); }
     @Transactional(readOnly = true) public VisaoCotacao get(Long id) { return view(findOwned(id)); }
-    @Transactional public VisaoCotacao open(Long id) { Cotacao q = findOwned(id); if (q.getStatus() != StatusCotacao.DRAFT && q.getStatus() != StatusCotacao.CLOSED) throw new RegraNegocioException("Somente cotações em rascunho ou fechadas podem ser abertas."); if (purchaseOrderRepository.existsByCotacaoId(id)) throw new RegraNegocioException("A cotação possui pedidos gerados e não pode ser reaberta."); if (q.getItens().isEmpty()) throw new RegraNegocioException("Inclua produtos antes de abrir a cotação."); if (q.getExpiraEm() != null && !q.getExpiraEm().isAfter(Instant.now())) throw new RegraNegocioException("Atualize o prazo antes de abrir a cotação."); if (q.getTokenPublico() == null) q.setTokenPublico(tokenGenerator.generate()); q.setStatus(StatusCotacao.OPEN); return view(q); }
+    @Transactional public VisaoItemCotacao atualizarItem(Long cotacaoId, Long itemId, SolicitacaoAtualizacaoItemCotacao request) {
+        Cotacao cotacao = findOwned(cotacaoId);
+        if (cotacao.getStatus() != StatusCotacao.DRAFT && cotacao.getStatus() != StatusCotacao.OPEN && cotacao.getStatus() != StatusCotacao.CLOSED)
+            throw new RegraNegocioException("Produtos só podem ser alterados em cotações em rascunho, abertas ou fechadas.");
+        ItemCotacao item = cotacao.getItens().stream().filter(i -> i.getId().equals(itemId)).findFirst()
+            .orElseThrow(() -> new RecursoNaoEncontradoException("Item da cotação não encontrado."));
+        boolean estavaAtivo = item.isAtivo();
+        item.setQuantidadeSolicitada(request.quantity());
+        item.setAtivo(request.active());
+        if (!estavaAtivo && request.active()) responseRepository.findAllByCotacaoEmpresaIdAndCotacaoIdOrderByCriadoEm(currentUser.companyId(), cotacaoId).forEach(resposta -> {
+            if (resposta.getItens().stream().noneMatch(itemResposta -> itemResposta.getItemCotacao().getId().equals(itemId))) {
+                ItemRespostaCotacao itemResposta = new ItemRespostaCotacao();
+                itemResposta.setRespostaCotacao(resposta); itemResposta.setItemCotacao(item); resposta.getItens().add(itemResposta);
+            }
+        });
+        estadoPedidos.invalidar(cotacaoId, currentUser.companyId());
+        return itemView(item);
+    }
+    @Transactional public VisaoCotacao open(Long id) { Cotacao q = findOwned(id); if (q.getStatus() != StatusCotacao.DRAFT && q.getStatus() != StatusCotacao.CLOSED) throw new RegraNegocioException("Somente cotações em rascunho ou fechadas podem ser abertas."); if (purchaseOrderRepository.existsByCotacaoId(id)) throw new RegraNegocioException("A cotação possui pedidos gerados e não pode ser reaberta."); if (q.getItens().stream().noneMatch(ItemCotacao::isAtivo)) throw new RegraNegocioException("Ative ao menos um produto antes de abrir a cotação."); if (q.getExpiraEm() != null && !q.getExpiraEm().isAfter(Instant.now())) throw new RegraNegocioException("Atualize o prazo antes de abrir a cotação."); if (q.getTokenPublico() == null) q.setTokenPublico(tokenGenerator.generate()); q.setStatus(StatusCotacao.OPEN); return view(q); }
     @Transactional public VisaoCotacao close(Long id) { Cotacao q = findOwned(id); if (q.getStatus() != StatusCotacao.OPEN) throw new RegraNegocioException("A cotação não está aberta."); q.setStatus(StatusCotacao.CLOSED); return view(q); }
     @Transactional(readOnly = true) public List<VisaoResposta> responses(Long id) { findOwned(id); return responseRepository.findAllByCotacaoEmpresaIdAndCotacaoIdOrderByCriadoEm(currentUser.companyId(), id).stream().map(this::responseView).toList(); }
+    @Transactional public VisaoResposta atualizarRespostaAtiva(Long cotacaoId, Long respostaId, SolicitacaoAtivacaoResposta request) {
+        Cotacao cotacao = findOwned(cotacaoId);
+        if (cotacao.getStatus() != StatusCotacao.DRAFT && cotacao.getStatus() != StatusCotacao.OPEN && cotacao.getStatus() != StatusCotacao.CLOSED)
+            throw new RegraNegocioException("Respostas só podem ser alteradas em cotações em rascunho, abertas ou fechadas.");
+        RespostaCotacao resposta = responseRepository.findById(respostaId).filter(r -> r.getCotacao().getId().equals(cotacaoId))
+            .orElseThrow(() -> new RecursoNaoEncontradoException("Resposta não encontrada."));
+        resposta.setAtivo(request.active());
+        estadoPedidos.invalidar(cotacaoId, currentUser.companyId());
+        return responseView(resposta);
+    }
     @Transactional(readOnly = true) public VisaoPainel dashboard() {
         Long companyId = currentUser.companyId(); List<ResumoCotacao> latest = list().stream().limit(6).toList();
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC); Instant start = now.with(TemporalAdjusters.firstDayOfMonth()).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
@@ -148,8 +177,9 @@ public class CotacaoService {
         if (candidatos.size() > 1) throw new RegraNegocioException("Há mais de um produto com o nome " + nome + ". Informe o EAN.");
         return candidatos.stream().findFirst();
     }
-    private ResumoCotacao listView(Cotacao q) { return new ResumoCotacao(q.getId(), q.getNome(), q.getStatus(), q.getExpiraEm(), q.getCriadoEm(), q.getItens().size(), responseRepository.countByCotacaoIdAndStatus(q.getId(), StatusResposta.SUBMITTED)); }
-    private VisaoCotacao view(Cotacao q) { return new VisaoCotacao(q.getId(), q.getNome(), q.getStatus(), q.getExpiraEm(), q.getCriadoEm(), q.getAtualizadoEm(), q.getTokenPublico(), q.getTokenPublico() == null ? null : removerBarra(urlPublicaCompartilhamento) + "/api/publico/cotacoes/" + q.getTokenPublico() + "/compartilhar", q.getItens().stream().map(i -> new VisaoItemCotacao(i.getId(), i.getProduto().getId(), i.getProduto().getEan(), i.getProduto().getNome(), i.getProduto().getLaboratorio(), i.getQuantidadeSolicitada())).toList()); }
+    private ResumoCotacao listView(Cotacao q) { return new ResumoCotacao(q.getId(), q.getNome(), q.getStatus(), q.getExpiraEm(), q.getCriadoEm(), (int) q.getItens().stream().filter(ItemCotacao::isAtivo).count(), responseRepository.countByCotacaoIdAndStatus(q.getId(), StatusResposta.SUBMITTED)); }
+    private VisaoCotacao view(Cotacao q) { return new VisaoCotacao(q.getId(), q.getNome(), q.getStatus(), q.getExpiraEm(), q.getCriadoEm(), q.getAtualizadoEm(), q.getTokenPublico(), q.getTokenPublico() == null ? null : removerBarra(urlPublicaCompartilhamento) + "/api/publico/cotacoes/" + q.getTokenPublico() + "/compartilhar", q.getItens().stream().map(this::itemView).toList()); }
+    private VisaoItemCotacao itemView(ItemCotacao i) { return new VisaoItemCotacao(i.getId(), i.getProduto().getId(), i.getProduto().getEan(), i.getProduto().getNome(), i.getProduto().getLaboratorio(), i.getQuantidadeSolicitada(), i.isAtivo()); }
     private String removerBarra(String valor) { return valor.endsWith("/") ? valor.substring(0, valor.length() - 1) : valor; }
-    private VisaoResposta responseView(RespostaCotacao r) { long count = r.getItens().stream().filter(i -> i.isDisponivel() && i.getPrecoUnitario() != null).count(); BigDecimal total = r.getItens().stream().filter(i -> i.isDisponivel() && i.getPrecoUnitario() != null).map(i -> i.getPrecoUnitario().multiply(BigDecimal.valueOf(Math.min(Optional.ofNullable(i.getQuantidadeDisponivel()).orElse(0), i.getItemCotacao().getQuantidadeSolicitada())))).reduce(BigDecimal.ZERO, BigDecimal::add); return new VisaoResposta(r.getId(), r.getNomeDistribuidora(), r.getNomeRepresentante(), r.getTelefone(), r.getEmail(), r.getStatus(), r.getEnviadoEm(), r.getCriadoEm(), count, total); }
+    private VisaoResposta responseView(RespostaCotacao r) { long count = r.getItens().stream().filter(i -> i.getItemCotacao().isAtivo() && i.isDisponivel() && i.getPrecoUnitario() != null).count(); BigDecimal total = r.getItens().stream().filter(i -> i.getItemCotacao().isAtivo() && i.isDisponivel() && i.getPrecoUnitario() != null).map(i -> i.getPrecoUnitario().multiply(BigDecimal.valueOf(Math.min(Optional.ofNullable(i.getQuantidadeDisponivel()).orElse(0), i.getItemCotacao().getQuantidadeSolicitada())))).reduce(BigDecimal.ZERO, BigDecimal::add); return new VisaoResposta(r.getId(), r.getNomeDistribuidora(), r.getNomeRepresentante(), r.getTelefone(), r.getEmail(), r.getStatus(), r.getEnviadoEm(), r.getCriadoEm(), count, total, r.isAtivo()); }
 }

@@ -23,14 +23,14 @@ public class ComparacaoCotacaoService {
         Cotacao cotacao=repositorioCotacoes.findByEmpresaIdAndId(empresaId,cotacaoId)
             .orElseThrow(()->new RecursoNaoEncontradoException("Cotação não encontrada."));
         List<RespostaCotacao> respostas=repositorioRespostas.findAllByCotacaoEmpresaIdAndCotacaoIdOrderByCriadoEm(empresaId,cotacaoId)
-            .stream().filter(r->r.getStatus()==StatusResposta.SUBMITTED).toList();
+            .stream().filter(r->r.isAtivo()&&r.getStatus()==StatusResposta.SUBMITTED).toList();
         Map<Long,EscolhaCompraCotacao> escolhas=new HashMap<>();
         repositorioEscolhas.findAllByItemCotacaoCotacaoId(cotacaoId).forEach(e->escolhas.put(e.getItemCotacao().getId(),e));
         List<TotalDistribuidor> totais=respostas.stream().map(this::totalDistribuidor).toList();
         Map<Long,Alocacao> alocacoes=new LinkedHashMap<>(); List<ComparacaoProduto> produtos=new ArrayList<>();
         int semOferta=0,coberturaParcial=0;
 
-        for(ItemCotacao itemCotacao:cotacao.getItens()){
+        for(ItemCotacao itemCotacao:cotacao.getItens().stream().filter(ItemCotacao::isAtivo).toList()){
             List<ReferenciaOferta> ofertas=respostas.stream().flatMap(resposta->resposta.getItens().stream()
                 .filter(item->item.getItemCotacao().getId().equals(itemCotacao.getId())&&ofertaValida(item))
                 .map(item->new ReferenciaOferta(resposta,item)))
@@ -77,7 +77,7 @@ public class ComparacaoCotacaoService {
         return new VisaoComparacao(produtos,totais,compra,semOferta,coberturaParcial,total,maior.subtract(total).max(BigDecimal.ZERO));
     }
     private boolean ofertaValida(ItemRespostaCotacao i){return i.isDisponivel()&&i.getPrecoUnitario()!=null&&i.getPrecoUnitario().signum()>0&&i.getQuantidadeDisponivel()!=null&&i.getQuantidadeDisponivel()>0;}
-    private TotalDistribuidor totalDistribuidor(RespostaCotacao r){int quantidade=0;BigDecimal total=BigDecimal.ZERO;for(ItemRespostaCotacao i:r.getItens())if(ofertaValida(i)){quantidade++;total=total.add(i.getPrecoUnitario().multiply(BigDecimal.valueOf(Math.min(i.getQuantidadeDisponivel(),i.getItemCotacao().getQuantidadeSolicitada()))));}return new TotalDistribuidor(r.getId(),r.getNomeDistribuidora(),quantidade,total);}
+    private TotalDistribuidor totalDistribuidor(RespostaCotacao r){int quantidade=0;BigDecimal total=BigDecimal.ZERO;for(ItemRespostaCotacao i:r.getItens())if(i.getItemCotacao().isAtivo()&&ofertaValida(i)){quantidade++;total=total.add(i.getPrecoUnitario().multiply(BigDecimal.valueOf(Math.min(i.getQuantidadeDisponivel(),i.getItemCotacao().getQuantidadeSolicitada()))));}return new TotalDistribuidor(r.getId(),r.getNomeDistribuidora(),quantidade,total);}
     private record ReferenciaOferta(RespostaCotacao resposta,ItemRespostaCotacao item){}
     private static class Alocacao{final Long respostaId;final String nome;final List<LinhaCompraSugerida> itens=new ArrayList<>();int quantidade;BigDecimal total=BigDecimal.ZERO;Alocacao(Long id,String nome){this.respostaId=id;this.nome=nome;}void adicionar(LinhaCompraSugerida i){itens.add(i);quantidade+=i.allocatedQuantity();total=total.add(i.subtotal());}CompraSugerida visualizar(){return new CompraSugerida(respostaId,nome,itens.size(),quantidade,total,List.copyOf(itens));}}
 }

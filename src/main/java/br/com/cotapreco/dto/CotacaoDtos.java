@@ -25,13 +25,15 @@ public final class CotacaoDtos {
         @Size(max = 160) String laboratory) {}
     public record SolicitacaoCriacaoCotacao(@NotBlank @Size(max = 180) String name, Instant expiresAt,
         @NotEmpty List<@Valid SolicitacaoItemCotacao> items) {}
-    public record VisaoItemCotacao(Long id, Long productId, String ean, String productName, String laboratory, Integer requestedQuantity) {}
+    public record SolicitacaoAtualizacaoItemCotacao(@NotNull @Min(1) Integer quantity, boolean active) {}
+    public record VisaoItemCotacao(Long id, Long productId, String ean, String productName, String laboratory, Integer requestedQuantity, boolean active) {}
     public record ResumoCotacao(Long id, String name, StatusCotacao status, Instant expiresAt, Instant createdAt,
         int productCount, long submittedResponses) {}
     public record VisaoCotacao(Long id, String name, StatusCotacao status, Instant expiresAt, Instant createdAt,
         Instant updatedAt, String publicToken, String publicUrl, List<VisaoItemCotacao> items) {}
+    public record SolicitacaoAtivacaoResposta(boolean active) {}
     public record VisaoResposta(Long id, String supplierName, String representativeName, String phone, String email,
-        StatusResposta status, Instant submittedAt, Instant createdAt, long quotedItems, BigDecimal total) {}
+        StatusResposta status, Instant submittedAt, Instant createdAt, long quotedItems, BigDecimal total, boolean active) {}
     public record VisaoPainel(long openQuotations, long finishedQuotations, long responsesThisMonth,
         BigDecimal quotedValue, BigDecimal estimatedSavings, List<ResumoCotacao> latestQuotations) {}
 }

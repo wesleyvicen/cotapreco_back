@@ -16,6 +16,7 @@ public class RespostaCotacao {
     @Column(name = "nome_distribuidora", nullable = false, length = 160) private String nomeDistribuidora;
     @Column(name = "telefone", nullable = false, length = 30) private String telefone;
     @Column(length = 180) private String email;
+    @Column(name = "ativo", nullable = false) private boolean ativo = true;
     @Column(name = "documento_distribuidora", length = 20) private String documentoDistribuidora;
     @Column(name = "chave_distribuidora", nullable = false, length = 220) private String chaveDistribuidora;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private StatusResposta status = StatusResposta.IN_PROGRESS;

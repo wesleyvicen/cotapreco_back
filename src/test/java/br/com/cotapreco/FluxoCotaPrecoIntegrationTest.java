@@ -416,6 +416,41 @@ class FluxoCotaPrecoIntegrationTest {
     }
 
     @Test
+    void desativaProdutoERespostaSemApagarHistoricoDaCotacao() throws Exception {
+        String autenticacaoFarmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String tokenCotacao = criarEAbrirCotacao(autenticacaoFarmacia, "Cotação com exclusões");
+        String sufixo = UUID.randomUUID().toString();
+        String telefone = ("81" + sufixo.replaceAll("\\D", "") + "000000000").substring(0, 11);
+        String autenticacaoRepresentante = cadastrarRepresentante(tokenCotacao, "Representante", telefone, "exclusao-" + sufixo + "@teste.local");
+        JsonNode resposta = criarProposta(tokenCotacao, autenticacaoRepresentante, "Distribuidora removível", null);
+        long respostaId = resposta.get("id").asLong();
+        long primeiroItemResposta = resposta.at("/itens/0/id").asLong();
+        long segundoItemResposta = resposta.at("/itens/1/id").asLong();
+        atualizarEEnviar(tokenCotacao, respostaId, autenticacaoRepresentante,
+            respostaJson("Distribuidora removível", null, primeiroItemResposta, segundoItemResposta, 10, 100, 5, 50));
+        long cotacaoId = localizarCotacaoPorToken(tokenCotacao);
+        JsonNode cotacao = json(mvc.perform(get("/api/quotations/{id}", cotacaoId).header("Authorization", autenticacaoFarmacia))
+            .andExpect(status().isOk()).andReturn());
+        long itemCotacaoId = cotacao.at("/items/0/id").asLong();
+        mvc.perform(put("/api/quotations/{id}/items/{itemId}", cotacaoId, itemCotacaoId).header("Authorization", autenticacaoFarmacia)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":120,\"active\":true}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.requestedQuantity").value(120)).andExpect(jsonPath("$.active").value(true));
+        mvc.perform(post("/api/quotations/{id}/close", cotacaoId).header("Authorization", autenticacaoFarmacia)).andExpect(status().isOk());
+        mvc.perform(put("/api/quotations/{id}/items/{itemId}", cotacaoId, itemCotacaoId).header("Authorization", autenticacaoFarmacia)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":120,\"active\":false}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.active").value(false));
+        mvc.perform(get("/api/publico/cotacoes/{token}", tokenCotacao)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalProdutos").value(1));
+        mvc.perform(get("/api/quotations/{id}/comparison", cotacaoId).header("Authorization", autenticacaoFarmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.products.length()").value(1));
+        mvc.perform(put("/api/quotations/{id}/responses/{responseId}/active", cotacaoId, respostaId).header("Authorization", autenticacaoFarmacia)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"active\":false}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.active").value(false));
+        mvc.perform(get("/api/quotations/{id}/comparison", cotacaoId).header("Authorization", autenticacaoFarmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.supplierTotals.length()").value(0));
+    }
+
+    @Test
     void usuarioAlteraSenhaInformandoASenhaAtual() throws Exception {
         Usuario administrador = usuarios.findByEmailIgnoreCase("admin@cotapreco.local").orElseThrow();
         String email = "senha-" + UUID.randomUUID() + "@teste.local";
