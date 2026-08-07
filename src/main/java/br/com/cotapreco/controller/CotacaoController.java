@@ -3,6 +3,7 @@ package br.com.cotapreco.controller;
 import br.com.cotapreco.dto.ComparacaoDtos.VisaoComparacao;
 import br.com.cotapreco.dto.CotacaoDtos.*;
 import br.com.cotapreco.dto.EscolhaCompraDtos.*;
+import br.com.cotapreco.dto.PedidoMinimoDtos.*;
 import br.com.cotapreco.security.UsuarioAtualService;
 import br.com.cotapreco.service.*;
 import jakarta.validation.Valid;
@@ -18,7 +19,7 @@ import java.util.List;
 @RestController @RequestMapping("/api/quotations") @RequiredArgsConstructor
 public class CotacaoController {
     private final CotacaoService service; private final ComparacaoCotacaoService comparisonService;
-    private final EscolhaCompraCotacaoService purchaseSelectionService; private final PlanoCompraService purchasePlanService; private final UsuarioAtualService currentUser;
+    private final EscolhaCompraCotacaoService purchaseSelectionService; private final PlanoCompraService purchasePlanService; private final PedidoMinimoService minimumOrderService; private final UsuarioAtualService currentUser;
     private final GeradorModeloImportacaoService templateService;
     @GetMapping public List<ResumoCotacao> list() { return service.list(); }
     @GetMapping("/{id}") public VisaoCotacao get(@PathVariable Long id) { return service.get(id); }
@@ -55,4 +56,10 @@ public class CotacaoController {
     public void resetPurchase(@PathVariable Long id, @PathVariable Long itemId) { purchaseSelectionService.voltarAoAutomatico(id, itemId); }
     @PutMapping("/{id}/purchase-plan") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
     public VisaoComparacao updatePurchasePlan(@PathVariable Long id,@Valid @RequestBody br.com.cotapreco.dto.PlanoCompraDtos.SolicitacaoPlanoCompra request){return purchasePlanService.atualizar(id,request);}
+    @GetMapping("/{id}/minimum-order-options/{responseId}")
+    public VisaoOpcoesPedidoMinimo minimumOrderOptions(@PathVariable Long id,@PathVariable Long responseId){return minimumOrderService.opcoes(id,responseId);}
+    @PostMapping("/{id}/minimum-order-options/{responseId}/apply") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
+    public ResultadoAplicacaoPedidoMinimo applyMinimumOrderOption(@PathVariable Long id,@PathVariable Long responseId,@Valid @RequestBody SolicitacaoAplicacaoPedidoMinimo request){return minimumOrderService.aplicar(id,responseId,request);}
+    @PutMapping("/{id}/responses/{responseId}/purchase-inclusion") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
+    public VisaoComparacao updatePurchaseInclusion(@PathVariable Long id,@PathVariable Long responseId,@RequestBody SolicitacaoInclusaoCompra request){return minimumOrderService.definirInclusao(id,responseId,request);}
 }

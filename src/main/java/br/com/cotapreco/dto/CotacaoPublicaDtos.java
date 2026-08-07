@@ -16,17 +16,19 @@ public final class CotacaoPublicaDtos {
 
     public record SolicitacaoNovaResposta(
         @NotBlank @Size(max = 160) String nomeDistribuidora,
-        @Size(max = 20) String documentoDistribuidora) {}
+        @Size(max = 20) String documentoDistribuidora,
+        @DecimalMin("0.01") @Digits(integer = 13, fraction = 2) BigDecimal valorMinimoPedido) {}
 
     public record ResumoRespostaPublica(Long id, String nomeDistribuidora, String documentoDistribuidora,
-        StatusResposta status, Instant enviadoEm, Instant atualizadoEm, int totalItensCotados, BigDecimal valorTotal) {}
+        BigDecimal valorMinimoPedido, StatusResposta status, Instant enviadoEm, Instant atualizadoEm,
+        int totalItensCotados, BigDecimal valorTotal) {}
 
     public record VisaoItemResposta(Long id, String ean, String nomeProduto, String laboratorio, Integer quantidadeSolicitada,
         BigDecimal precoUnitario, Integer quantidadeDisponivel, boolean disponivel, String observacao) {}
 
     public record VisaoRespostaPublica(Long id, String nomeEmpresa, String nomeCotacao, String nomeRepresentante,
-        String nomeDistribuidora, String documentoDistribuidora, StatusResposta status, Instant expiraEm,
-        boolean podeCorrigir, List<VisaoItemResposta> itens) {}
+        String nomeDistribuidora, String documentoDistribuidora, BigDecimal valorMinimoPedido,
+        StatusResposta status, Instant expiraEm, boolean podeCorrigir, List<VisaoItemResposta> itens) {}
 
     public record AtualizacaoItemResposta(@NotNull Long id,
         @DecimalMin(value = "0.0001", message = "Preço deve ser maior que zero") BigDecimal precoUnitario,
@@ -35,6 +37,7 @@ public final class CotacaoPublicaDtos {
     public record SolicitacaoAtualizacaoResposta(
         @NotBlank @Size(max = 160) String nomeDistribuidora,
         @Size(max = 20) String documentoDistribuidora,
+        @DecimalMin("0.01") @Digits(integer = 13, fraction = 2) BigDecimal valorMinimoPedido,
         @NotEmpty List<@Valid AtualizacaoItemResposta> itens,
         boolean autoSave) {}
 }

@@ -3,6 +3,7 @@ package br.com.cotapreco.model;
 import br.com.cotapreco.enums.StatusResposta;
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.*;
 
@@ -18,6 +19,8 @@ public class RespostaCotacao {
     @Column(length = 180) private String email;
     @Column(name = "ativo", nullable = false) private boolean ativo = true;
     @Column(name = "documento_distribuidora", length = 20) private String documentoDistribuidora;
+    @Column(name = "valor_minimo_pedido", precision = 15, scale = 2) private BigDecimal valorMinimoPedido;
+    @Column(name = "incluida_compra_sugerida", nullable = false) private boolean incluidaCompraSugerida = true;
     @Column(name = "chave_distribuidora", nullable = false, length = 220) private String chaveDistribuidora;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private StatusResposta status = StatusResposta.IN_PROGRESS;
     @Column(name = "enviado_em") private Instant enviadoEm;

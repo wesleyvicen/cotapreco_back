@@ -27,7 +27,8 @@ public class GeradorImagemPedidoService {
 
     public byte[] gerar(PedidoCompra pedido) {
         try {
-            int altura = 510 + Math.max(1, pedido.getItens().size()) * 82;
+            boolean abaixoMinimo = pedido.getValorMinimoPedido() != null && pedido.getTotal().compareTo(pedido.getValorMinimoPedido()) < 0;
+            int altura = 510 + Math.max(1, pedido.getItens().size()) * 82 + (pedido.getValorMinimoPedido() == null ? 0 : abaixoMinimo ? 70 : 30);
             BufferedImage imagem = new BufferedImage(LARGURA, altura, BufferedImage.TYPE_INT_RGB);
             Graphics2D g = imagem.createGraphics();
             configurar(g);
@@ -71,6 +72,14 @@ public class GeradorImagemPedidoService {
             y += 28;
             escrever(g, "TOTAL DO PEDIDO", 720, y, 17, Font.BOLD, CINZA);
             escreverDireita(g, moeda(pedido.getTotal()), LARGURA - MARGEM, y + 2, 28, Font.BOLD, VERDE);
+            if (pedido.getValorMinimoPedido() != null) {
+                y += 32;
+                escreverDireita(g, "Mínimo informado: " + moeda(pedido.getValorMinimoPedido()), LARGURA - MARGEM, y, 15, Font.PLAIN, CINZA);
+                if (abaixoMinimo) {
+                    y += 34;
+                    escrever(g, "ATENÇÃO: pedido abaixo do mínimo informado; sujeito à aceitação da distribuidora.", MARGEM, y, 16, Font.BOLD, new Color(180, 92, 23));
+                }
+            }
             String data = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.of("America/Recife")).format(pedido.getGeradoEm());
             escrever(g, "Gerado pelo CotaPreço em " + data, MARGEM, altura - 44, 13, Font.PLAIN, CINZA);
 

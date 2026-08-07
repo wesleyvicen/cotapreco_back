@@ -24,6 +24,8 @@ public class PedidoCompra {
     @Column(name="email_representante",length=180) private String emailRepresentante;
     @Column(length=500) private String observacao;
     @Column(nullable=false,precision=15,scale=4) private BigDecimal total;
+    @Column(name="valor_minimo_pedido",precision=15,scale=2) private BigDecimal valorMinimoPedido;
+    @Column(name="abaixo_minimo_confirmado",nullable=false) private boolean abaixoMinimoConfirmado;
     @ManyToOne(fetch=FetchType.LAZY,optional=false) @JoinColumn(name="criado_por") private Usuario criadoPor;
     @Column(name="gerado_em",nullable=false) private Instant geradoEm;
     @Column(name="compartilhado_em") private Instant compartilhadoEm;

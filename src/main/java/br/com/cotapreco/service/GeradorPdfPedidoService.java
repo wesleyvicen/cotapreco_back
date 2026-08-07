@@ -27,6 +27,7 @@ public class GeradorPdfPedidoService {
                 tabela.addCell(corpo(moeda(item.getPrecoUnitario()),normal));tabela.addCell(corpo(moeda(item.getSubtotal()),normal));
             }
             documento.add(tabela);Paragraph total=new Paragraph("TOTAL DO PEDIDO: "+moeda(pedido.getTotal()),FontFactory.getFont(FontFactory.HELVETICA_BOLD,14,new Color(14,77,59)));total.setAlignment(Element.ALIGN_RIGHT);total.setSpacingBefore(12);documento.add(total);
+            if(pedido.getValorMinimoPedido()!=null){Paragraph minimo=new Paragraph("Mínimo informado pela distribuidora: "+moeda(pedido.getValorMinimoPedido()),normal);minimo.setAlignment(Element.ALIGN_RIGHT);documento.add(minimo);if(pedido.getTotal().compareTo(pedido.getValorMinimoPedido())<0){Paragraph aviso=new Paragraph("ATENÇÃO: pedido abaixo do mínimo informado; sujeito à aceitação da distribuidora.",FontFactory.getFont(FontFactory.HELVETICA_BOLD,10,new Color(180,92,23)));aviso.setSpacingBefore(10);documento.add(aviso);}}
             documento.add(Chunk.NEWLINE);String data=DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.of("America/Recife")).format(pedido.getGeradoEm());documento.add(new Paragraph("Gerado pelo CotaPreço em "+data,FontFactory.getFont(FontFactory.HELVETICA,8,Color.GRAY)));documento.close();return saida.toByteArray();
         }catch(Exception ex){throw new IllegalStateException("Não foi possível gerar o PDF do pedido.",ex);}
     }

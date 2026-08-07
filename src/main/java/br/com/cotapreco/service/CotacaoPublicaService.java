@@ -11,6 +11,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.util.*;
@@ -55,7 +56,7 @@ public class CotacaoPublicaService {
         resposta.setNomeRepresentante(representante.getNome());
         resposta.setTelefone(representante.getTelefone());
         resposta.setEmail(representante.getEmail());
-        preencherDistribuidora(resposta, solicitacao.nomeDistribuidora(), documento, chave);
+        preencherDistribuidora(resposta, solicitacao.nomeDistribuidora(), documento, chave, solicitacao.valorMinimoPedido());
         for (ItemCotacao itemCotacao : cotacao.getItens().stream().filter(ItemCotacao::isAtivo).toList()) {
             ItemRespostaCotacao item = new ItemRespostaCotacao();
             item.setRespostaCotacao(resposta);
@@ -120,7 +121,7 @@ public class CotacaoPublicaService {
             }
             item.setObservacao(limpar(entrada.observacao()));
         }
-        preencherDistribuidora(resposta, solicitacao.nomeDistribuidora(), documento, chave);
+        preencherDistribuidora(resposta, solicitacao.nomeDistribuidora(), documento, chave, solicitacao.valorMinimoPedido());
         resposta.setAtualizadoEm(Instant.now());
         if (resposta.getStatus() == StatusResposta.SUBMITTED) resposta.setEnviadoEm(Instant.now());
         try { repositorioRespostas.saveAndFlush(resposta); }
@@ -160,9 +161,10 @@ public class CotacaoPublicaService {
     private void garantirRespostaAtiva(RespostaCotacao resposta) {
         if (!resposta.isAtivo()) throw new RegraNegocioException("Esta proposta foi desativada pela farmácia e não pode ser alterada.");
     }
-    private void preencherDistribuidora(RespostaCotacao resposta, String nome, String documento, String chave) {
+    private void preencherDistribuidora(RespostaCotacao resposta, String nome, String documento, String chave, BigDecimal valorMinimoPedido) {
         resposta.setNomeDistribuidora(nome.trim());
         resposta.setDocumentoDistribuidora(documento);
+        resposta.setValorMinimoPedido(valorMinimoPedido == null ? null : valorMinimoPedido.setScale(2, RoundingMode.HALF_UP));
         resposta.setChaveDistribuidora(chave);
     }
     private String normalizarDocumento(String valor) {
@@ -204,11 +206,11 @@ public class CotacaoPublicaService {
             total = total.add(item.getPrecoUnitario().multiply(BigDecimal.valueOf(quantidade)));
         }
         return new ResumoRespostaPublica(resposta.getId(), resposta.getNomeDistribuidora(), resposta.getDocumentoDistribuidora(),
-            resposta.getStatus(), resposta.getEnviadoEm(), resposta.getAtualizadoEm(), totalItens, total);
+            resposta.getValorMinimoPedido(), resposta.getStatus(), resposta.getEnviadoEm(), resposta.getAtualizadoEm(), totalItens, total);
     }
     private VisaoRespostaPublica visualizar(RespostaCotacao resposta) {
         return new VisaoRespostaPublica(resposta.getId(), resposta.getCotacao().getEmpresa().getNome(), resposta.getCotacao().getNome(),
-            resposta.getNomeRepresentante(), resposta.getNomeDistribuidora(), resposta.getDocumentoDistribuidora(), resposta.getStatus(),
+            resposta.getNomeRepresentante(), resposta.getNomeDistribuidora(), resposta.getDocumentoDistribuidora(), resposta.getValorMinimoPedido(), resposta.getStatus(),
             resposta.getCotacao().getExpiraEm(), resposta.isAtivo() && resposta.getCotacao().podeReceberRespostas() && resposta.getCotacao().getItens().stream().anyMatch(ItemCotacao::isAtivo), resposta.getItens().stream().filter(item -> item.getItemCotacao().isAtivo())
                 .map(item -> new VisaoItemResposta(item.getId(), item.getItemCotacao().getProduto().getEan(),
                     item.getItemCotacao().getProduto().getNome(), laboratorio(item.getItemCotacao()), item.getItemCotacao().getQuantidadeSolicitada(), item.getPrecoUnitario(),

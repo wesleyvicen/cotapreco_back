@@ -631,6 +631,150 @@ class FluxoCotaPrecoIntegrationTest {
     }
 
     @Test
+    void valorMinimoOpcionalPodeSerAtingidoComUnidadesExtras() throws Exception {
+        String farmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String token = criarEAbrirCotacao(farmacia, "Cotação mínimo com extras");
+        String representante = cadastrarRepresentante(token, "Mínimo Extras", "81999993201", "minimo-extras@teste.local");
+        JsonNode proposta = criarProposta(token, representante, "Distribuidora Mínimo", null);
+        long respostaId = proposta.get("id").asLong(), item1 = proposta.at("/itens/0/id").asLong(), item2 = proposta.at("/itens/1/id").asLong();
+
+        mvc.perform(put("/api/publico/cotacoes/{token}/respostas/{id}", token, respostaId).header("Authorization", representante)
+            .contentType(MediaType.APPLICATION_JSON).content(respostaJsonMinimo("Distribuidora Mínimo", null, 0,
+                itemDisponivel(item1, 10, 150, "Estoque para completar o pedido mínimo"), itemIndisponivel(item2))))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.fields.valorMinimoPedido").exists());
+
+        atualizarEEnviar(token, respostaId, representante, respostaJsonMinimo("Distribuidora Mínimo", null, 1200,
+            itemDisponivel(item1, 10, 150, "Estoque para completar o pedido mínimo"), itemIndisponivel(item2)));
+        mvc.perform(get("/api/publico/cotacoes/{token}/minhas-respostas", token).header("Authorization", representante))
+            .andExpect(status().isOk()).andExpect(jsonPath("$[0].valorMinimoPedido").value(1200));
+
+        long cotacaoId = localizarCotacaoPorToken(token);
+        mvc.perform(get("/api/quotations/{id}/comparison", cotacaoId).header("Authorization", farmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.suggestedPurchase[0].minimumOrderStatus").value("ABAIXO_DO_MINIMO"))
+            .andExpect(jsonPath("$.suggestedPurchase[0].minimumOrderShortfall").value(200));
+        mvc.perform(post("/api/quotations/{id}/close", cotacaoId).header("Authorization", farmacia)).andExpect(status().isOk());
+        mvc.perform(get("/api/quotations/{id}/minimum-order-options/{responseId}", cotacaoId, respostaId).header("Authorization", farmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.reachMinimum.feasible").value(true))
+            .andExpect(jsonPath("$.reachMinimum.extraUnits").value(20))
+            .andExpect(jsonPath("$.reachMinimum.projectedSupplierTotal").value(1200));
+        mvc.perform(post("/api/quotations/{id}/minimum-order-options/{responseId}/apply", cotacaoId, respostaId).header("Authorization", farmacia)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"strategy\":\"ATINGIR_MINIMO\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.comparison.suggestedPurchase[0].minimumOrderStatus").value("ATENDIDO"))
+            .andExpect(jsonPath("$.comparison.products[0].desiredQuantity").value(120));
+    }
+
+    @Test
+    void atingeMinimoRealocandoItensSemAumentarQuantidadeTotal() throws Exception {
+        String farmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String token = criarEAbrirCotacao(farmacia, "Cotação mínimo por realocação");
+        String representante = cadastrarRepresentante(token, "Mínimo Realocação", "81999993204", "minimo-realocacao@teste.local");
+        JsonNode alvo = criarProposta(token, representante, "Distribuidora Alvo", null);
+        JsonNode concorrente = criarProposta(token, representante, "Distribuidora Concorrente", null);
+        long alvoId = alvo.get("id").asLong();
+        atualizarEEnviar(token, alvoId, representante, respostaJsonMinimo("Distribuidora Alvo", null, 900,
+            itemDisponivel(alvo.at("/itens/0/id").asLong(), 5, 100, null), itemDisponivel(alvo.at("/itens/1/id").asLong(), 10, 50, null)));
+        atualizarEEnviar(token, concorrente.get("id").asLong(), representante, respostaJsonMinimo("Distribuidora Concorrente", null, null,
+            itemDisponivel(concorrente.at("/itens/0/id").asLong(), 6, 100, null), itemDisponivel(concorrente.at("/itens/1/id").asLong(), 5, 50, null)));
+        long cotacaoId = localizarCotacaoPorToken(token);
+        mvc.perform(post("/api/quotations/{id}/close", cotacaoId).header("Authorization", farmacia)).andExpect(status().isOk());
+        mvc.perform(get("/api/quotations/{id}/minimum-order-options/{responseId}", cotacaoId, alvoId).header("Authorization", farmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.reachMinimum.feasible").value(true))
+            .andExpect(jsonPath("$.reachMinimum.extraUnits").value(0))
+            .andExpect(jsonPath("$.reachMinimum.adjustments[0].type").value("REALOCACAO"));
+        mvc.perform(post("/api/quotations/{id}/minimum-order-options/{responseId}/apply", cotacaoId, alvoId).header("Authorization", farmacia)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"strategy\":\"ATINGIR_MINIMO\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.comparison.bestCompositionTotal").value(950))
+            .andExpect(jsonPath("$.comparison.suggestedPurchase[0].responseId").value(alvoId))
+            .andExpect(jsonPath("$.comparison.suggestedPurchase[0].minimumOrderStatus").value("ATENDIDO"));
+    }
+
+    @Test
+    void pedidoAbaixoDoMinimoExigeConfirmacaoERegistraRisco() throws Exception {
+        String farmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String token = criarEAbrirCotacao(farmacia, "Cotação mínimo confirmado");
+        String representante = cadastrarRepresentante(token, "Mínimo Confirmação", "81999993202", "minimo-confirmacao@teste.local");
+        JsonNode proposta = criarProposta(token, representante, "Distribuidora Confirmação", null);
+        long respostaId = proposta.get("id").asLong(), item1 = proposta.at("/itens/0/id").asLong(), item2 = proposta.at("/itens/1/id").asLong();
+        atualizarEEnviar(token, respostaId, representante, respostaJsonMinimo("Distribuidora Confirmação", null, 1500,
+            itemDisponivel(item1, 10, 100, null), itemIndisponivel(item2)));
+        Empresa empresa = usuarios.findByEmailIgnoreCase("admin@cotapreco.local").orElseThrow().getEmpresa();
+        empresa.setCnpj("12345678000155"); empresas.save(empresa);
+        long cotacaoId = localizarCotacaoPorToken(token);
+        mvc.perform(post("/api/quotations/{id}/close", cotacaoId).header("Authorization", farmacia)).andExpect(status().isOk());
+        mvc.perform(put("/api/quotations/{id}/orders/{responseId}", cotacaoId, respostaId).header("Authorization", farmacia)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"observation\":null,\"confirmBelowMinimum\":false}"))
+            .andExpect(status().isUnprocessableEntity());
+        JsonNode pedido = json(mvc.perform(put("/api/quotations/{id}/orders/{responseId}", cotacaoId, respostaId).header("Authorization", farmacia)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"observation\":null,\"confirmBelowMinimum\":true}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.belowMinimum").value(true))
+            .andExpect(jsonPath("$.belowMinimumConfirmed").value(true)).andExpect(jsonPath("$.minimumOrderValue").value(1500)).andReturn());
+        mvc.perform(get("/api/quotations/{id}/orders/{orderId}/pdf", cotacaoId, pedido.get("id").asLong()).header("Authorization", farmacia))
+            .andExpect(status().isOk()).andExpect(content().contentType(MediaType.APPLICATION_PDF));
+        mvc.perform(get("/api/quotations/{id}/orders/{orderId}/image", cotacaoId, pedido.get("id").asLong()).header("Authorization", farmacia))
+            .andExpect(status().isOk()).andExpect(content().contentType(MediaType.IMAGE_PNG));
+    }
+
+    @Test
+    void repassaPedidoInteiroEPreservaPropostaNoComparativo() throws Exception {
+        String farmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String token = criarEAbrirCotacao(farmacia, "Cotação repasse mínimo");
+        String representante = cadastrarRepresentante(token, "Mínimo Repasse", "81999993203", "minimo-repasse@teste.local");
+        JsonNode primeira = criarProposta(token, representante, "Distribuidora Barata", null);
+        JsonNode segunda = criarProposta(token, representante, "Distribuidora Alternativa", null);
+        long primeiraId = primeira.get("id").asLong();
+        atualizarEEnviar(token, primeiraId, representante, respostaJsonMinimo("Distribuidora Barata", null, 5000,
+            itemDisponivel(primeira.at("/itens/0/id").asLong(), 5, 100, null), itemDisponivel(primeira.at("/itens/1/id").asLong(), 5, 50, null)));
+        atualizarEEnviar(token, segunda.get("id").asLong(), representante, respostaJsonMinimo("Distribuidora Alternativa", null, null,
+            itemDisponivel(segunda.at("/itens/0/id").asLong(), 6, 100, null), itemDisponivel(segunda.at("/itens/1/id").asLong(), 6, 50, null)));
+        long cotacaoId = localizarCotacaoPorToken(token);
+        mvc.perform(post("/api/quotations/{id}/close", cotacaoId).header("Authorization", farmacia)).andExpect(status().isOk());
+        mvc.perform(get("/api/quotations/{id}/minimum-order-options/{responseId}", cotacaoId, primeiraId).header("Authorization", farmacia))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.reallocateOrder.feasible").value(true))
+            .andExpect(jsonPath("$.reallocateOrder.uncoveredUnits").value(0));
+        mvc.perform(post("/api/quotations/{id}/minimum-order-options/{responseId}/apply", cotacaoId, primeiraId).header("Authorization", farmacia)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"strategy\":\"REPASSAR_PEDIDO\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.comparison.supplierTotals[0].includedInSuggestedPurchase").value(false))
+            .andExpect(jsonPath("$.comparison.products[0].offers.length()").value(2))
+            .andExpect(jsonPath("$.comparison.suggestedPurchase[0].supplierName").value("Distribuidora Alternativa"));
+        mvc.perform(put("/api/quotations/{id}/responses/{responseId}/purchase-inclusion", cotacaoId, primeiraId).header("Authorization", farmacia)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"included\":true}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.supplierTotals[0].includedInSuggestedPurchase").value(true));
+    }
+
+    @Test
+    void repassaPedidoMesmoQuandoCotacaoJaPossuiItensSemCobertura() throws Exception {
+        String farmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
+        String token = criarEAbrirCotacao(farmacia, "Cotação repasse com falta anterior");
+        String representante = cadastrarRepresentante(token, "Repasse com falta", "81999993205", "repasse-falta@teste.local");
+        JsonNode alvo = criarProposta(token, representante, "Distribuidora Alvo", null);
+        JsonNode alternativa = criarProposta(token, representante, "Distribuidora Alternativa", null);
+        long alvoId = alvo.get("id").asLong();
+        atualizarEEnviar(token, alvoId, representante, respostaJsonMinimo("Distribuidora Alvo", null, 5000,
+            itemDisponivel(alvo.at("/itens/0/id").asLong(), 5, 100, null),
+            itemIndisponivel(alvo.at("/itens/1/id").asLong())));
+        atualizarEEnviar(token, alternativa.get("id").asLong(), representante,
+            respostaJsonMinimo("Distribuidora Alternativa", null, null,
+                itemDisponivel(alternativa.at("/itens/0/id").asLong(), 6, 100, null),
+                itemIndisponivel(alternativa.at("/itens/1/id").asLong())));
+        long cotacaoId = localizarCotacaoPorToken(token);
+        mvc.perform(post("/api/quotations/{id}/close", cotacaoId).header("Authorization", farmacia))
+            .andExpect(status().isOk());
+
+        mvc.perform(get("/api/quotations/{id}/minimum-order-options/{responseId}", cotacaoId, alvoId)
+            .header("Authorization", farmacia))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.reallocateOrder.feasible").value(true))
+            .andExpect(jsonPath("$.reallocateOrder.uncoveredUnits").value(0))
+            .andExpect(jsonPath("$.reallocateOrder.adjustments[0].destinationSupplier").value("Distribuidora Alternativa"));
+        mvc.perform(post("/api/quotations/{id}/minimum-order-options/{responseId}/apply", cotacaoId, alvoId)
+            .header("Authorization", farmacia).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"strategy\":\"REPASSAR_PEDIDO\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.comparison.productsWithoutOffer").value(1))
+            .andExpect(jsonPath("$.comparison.suggestedPurchase[0].supplierName").value("Distribuidora Alternativa"));
+    }
+
+    @Test
     void corsLiberaSomenteFrontendConfigurado() throws Exception {
         mvc.perform(options("/api/publico/representantes/login")
             .header("Origin", "http://localhost:5173")
@@ -703,6 +847,11 @@ class FluxoCotaPrecoIntegrationTest {
     private String respostaJson(String nome, String documento, long primeiro, long segundo, Integer preco1, Integer quantidade1, Integer preco2, Integer quantidade2) throws Exception {
         Map<String,Object> dados = new LinkedHashMap<>(); dados.put("nomeDistribuidora", nome); dados.put("documentoDistribuidora", documento);
         dados.put("itens", List.of(item(primeiro, preco1, quantidade1), item(segundo, preco2, quantidade2))); return mapper.writeValueAsString(dados);
+    }
+    @SafeVarargs
+    private final String respostaJsonMinimo(String nome, String documento, Integer minimo, Map<String,Object>... itens) throws Exception {
+        Map<String,Object> dados = new LinkedHashMap<>(); dados.put("nomeDistribuidora", nome); dados.put("documentoDistribuidora", documento);
+        dados.put("valorMinimoPedido", minimo); dados.put("itens", List.of(itens)); return mapper.writeValueAsString(dados);
     }
     @SafeVarargs
     private final String respostaJson(String nome, String documento, Map<String,Object>... itens) throws Exception {

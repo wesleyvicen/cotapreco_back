@@ -2,6 +2,7 @@ package br.com.cotapreco.service;
 
 import br.com.cotapreco.dto.ComparacaoDtos.*;
 import br.com.cotapreco.enums.StatusResposta;
+import br.com.cotapreco.enums.StatusPedidoMinimo;
 import br.com.cotapreco.exception.RecursoNaoEncontradoException;
 import br.com.cotapreco.model.*;
 import br.com.cotapreco.repository.*;
@@ -35,16 +36,17 @@ public class ComparacaoCotacaoService {
                 .filter(item->item.getItemCotacao().getId().equals(itemCotacao.getId())&&ofertaValida(item))
                 .map(item->new ReferenciaOferta(resposta,item)))
                 .sorted(Comparator.comparing((ReferenciaOferta o)->o.item.getPrecoUnitario()).thenComparing(o->o.resposta.getId())).toList();
+            List<ReferenciaOferta> ofertasCompra=ofertas.stream().filter(o->o.resposta.isIncluidaCompraSugerida()).toList();
             EscolhaCompraCotacao ajuste=escolhas.get(itemCotacao.getId());
             int desejada=ajuste!=null&&ajuste.getQuantidadeDesejada()!=null?ajuste.getQuantidadeDesejada():itemCotacao.getQuantidadeSolicitada();
             boolean usarEscolha=ajuste!=null&&ajuste.getItemRespostaCotacao()!=null&&(ajuste.isCampeaoManual()||ajuste.getQuantidadeCampeao()!=null);
-            ReferenciaOferta escolhida=!usarEscolha?null:ofertas.stream()
+            ReferenciaOferta escolhida=!usarEscolha?null:ofertasCompra.stream()
                 .filter(o->o.item.getId().equals(ajuste.getItemRespostaCotacao().getId())).findFirst().orElse(null);
             boolean manual=escolhida!=null&&ajuste.isCampeaoManual();
             boolean manualInvalida=usarEscolha&&escolhida==null;
-            ReferenciaOferta campeaCompra=escolhida!=null?escolhida:(ofertas.isEmpty()?null:ofertas.getFirst());
+            ReferenciaOferta campeaCompra=escolhida!=null?escolhida:(ofertasCompra.isEmpty()?null:ofertasCompra.getFirst());
             List<ReferenciaOferta> ordem=new ArrayList<>(); if(campeaCompra!=null)ordem.add(campeaCompra);
-            ofertas.stream().filter(o->campeaCompra==null||!o.item.getId().equals(campeaCompra.item.getId())).forEach(ordem::add);
+            ofertasCompra.stream().filter(o->campeaCompra==null||!o.item.getId().equals(campeaCompra.item.getId())).forEach(ordem::add);
             Integer quantidadeCampeao=ajuste==null?null:ajuste.getQuantidadeCampeao();
             String justificativa=ajuste==null?null:ajuste.getJustificativaEstoque();
 
@@ -58,7 +60,7 @@ public class ComparacaoCotacaoService {
                 else quantidade=Math.min(restante,oferta.item.getQuantidadeDisponivel());
                 if(quantidade<=0){primeira=false;continue;}
                 int posicao=ofertas.indexOf(oferta)+1;BigDecimal subtotal=oferta.item.getPrecoUnitario().multiply(BigDecimal.valueOf(quantidade));
-                alocacoes.computeIfAbsent(oferta.resposta.getId(),id->new Alocacao(id,oferta.resposta.getNomeDistribuidora()))
+                alocacoes.computeIfAbsent(oferta.resposta.getId(),id->new Alocacao(oferta.resposta))
                     .adicionar(new LinhaCompraSugerida(itemCotacao.getId(),itemCotacao.getProduto().getEan(),itemCotacao.getProduto().getNome(),
                         quantidade,oferta.item.getPrecoUnitario(),subtotal,posicao,primeira,!primeira,manual&&primeira,primeira?justificativa:null));
                 restante-=quantidade;primeira=false;
@@ -77,7 +79,7 @@ public class ComparacaoCotacaoService {
         return new VisaoComparacao(produtos,totais,compra,semOferta,coberturaParcial,total,maior.subtract(total).max(BigDecimal.ZERO));
     }
     private boolean ofertaValida(ItemRespostaCotacao i){return i.isDisponivel()&&i.getPrecoUnitario()!=null&&i.getPrecoUnitario().signum()>0&&i.getQuantidadeDisponivel()!=null&&i.getQuantidadeDisponivel()>0;}
-    private TotalDistribuidor totalDistribuidor(RespostaCotacao r){int quantidade=0;BigDecimal total=BigDecimal.ZERO;for(ItemRespostaCotacao i:r.getItens())if(i.getItemCotacao().isAtivo()&&ofertaValida(i)){quantidade++;total=total.add(i.getPrecoUnitario().multiply(BigDecimal.valueOf(Math.min(i.getQuantidadeDisponivel(),i.getItemCotacao().getQuantidadeSolicitada()))));}return new TotalDistribuidor(r.getId(),r.getNomeDistribuidora(),quantidade,total);}
+    private TotalDistribuidor totalDistribuidor(RespostaCotacao r){int quantidade=0;BigDecimal total=BigDecimal.ZERO;for(ItemRespostaCotacao i:r.getItens())if(i.getItemCotacao().isAtivo()&&ofertaValida(i)){quantidade++;total=total.add(i.getPrecoUnitario().multiply(BigDecimal.valueOf(Math.min(i.getQuantidadeDisponivel(),i.getItemCotacao().getQuantidadeSolicitada()))));}return new TotalDistribuidor(r.getId(),r.getNomeDistribuidora(),quantidade,total,r.getValorMinimoPedido(),r.isIncluidaCompraSugerida());}
     private record ReferenciaOferta(RespostaCotacao resposta,ItemRespostaCotacao item){}
-    private static class Alocacao{final Long respostaId;final String nome;final List<LinhaCompraSugerida> itens=new ArrayList<>();int quantidade;BigDecimal total=BigDecimal.ZERO;Alocacao(Long id,String nome){this.respostaId=id;this.nome=nome;}void adicionar(LinhaCompraSugerida i){itens.add(i);quantidade+=i.allocatedQuantity();total=total.add(i.subtotal());}CompraSugerida visualizar(){return new CompraSugerida(respostaId,nome,itens.size(),quantidade,total,List.copyOf(itens));}}
+    private static class Alocacao{final Long respostaId;final String nome;final BigDecimal minimo;final List<LinhaCompraSugerida> itens=new ArrayList<>();int quantidade;BigDecimal total=BigDecimal.ZERO;Alocacao(RespostaCotacao resposta){this.respostaId=resposta.getId();this.nome=resposta.getNomeDistribuidora();this.minimo=resposta.getValorMinimoPedido();}void adicionar(LinhaCompraSugerida i){itens.add(i);quantidade+=i.allocatedQuantity();total=total.add(i.subtotal());}CompraSugerida visualizar(){BigDecimal falta=minimo==null?BigDecimal.ZERO:minimo.subtract(total).max(BigDecimal.ZERO);StatusPedidoMinimo status=minimo==null?StatusPedidoMinimo.SEM_MINIMO:falta.signum()==0?StatusPedidoMinimo.ATENDIDO:StatusPedidoMinimo.ABAIXO_DO_MINIMO;return new CompraSugerida(respostaId,nome,itens.size(),quantidade,total,minimo,falta,status,List.copyOf(itens));}}
 }

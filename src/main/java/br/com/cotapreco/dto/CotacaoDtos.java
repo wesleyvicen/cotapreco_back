@@ -34,7 +34,8 @@ public final class CotacaoDtos {
         Instant updatedAt, String publicToken, String publicUrl, List<VisaoItemCotacao> items) {}
     public record SolicitacaoAtivacaoResposta(boolean active) {}
     public record VisaoResposta(Long id, String supplierName, String representativeName, String phone, String email,
-        StatusResposta status, Instant submittedAt, Instant createdAt, long quotedItems, BigDecimal total, boolean active) {}
+        StatusResposta status, Instant submittedAt, Instant createdAt, long quotedItems, BigDecimal total,
+        BigDecimal minimumOrderValue, boolean includedInSuggestedPurchase, boolean active) {}
     public record VisaoPainel(long openQuotations, long finishedQuotations, long responsesThisMonth,
         BigDecimal quotedValue, BigDecimal estimatedSavings, List<ResumoCotacao> latestQuotations) {}
 }

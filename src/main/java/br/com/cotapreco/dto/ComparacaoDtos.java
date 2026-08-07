@@ -2,6 +2,7 @@ package br.com.cotapreco.dto;
 
 import java.math.BigDecimal;
 import java.util.List;
+import br.com.cotapreco.enums.StatusPedidoMinimo;
 
 public final class ComparacaoDtos {
     private ComparacaoDtos() {}
@@ -11,12 +12,14 @@ public final class ComparacaoDtos {
         List<OfertaDistribuidor> offers, String winningSupplier, BigDecimal bestUnitPrice, int coveredQuantity,
         int missingQuantity, Long selectedResponseId, boolean manualSelection, boolean invalidManualSelection,
         Integer championQuantity, Integer championAvailableQuantity, String stockOverrideNote) {}
-    public record TotalDistribuidor(Long responseId, String supplierName, int quotedItems, BigDecimal total) {}
+    public record TotalDistribuidor(Long responseId, String supplierName, int quotedItems, BigDecimal total,
+        BigDecimal minimumOrderValue, boolean includedInSuggestedPurchase) {}
     public record LinhaCompraSugerida(Long quotationItemId, String ean, String productName, int allocatedQuantity,
         BigDecimal unitPrice, BigDecimal subtotal, int offerPosition, boolean champion, boolean complement,
         boolean manualSelection, String stockOverrideNote) {}
     public record CompraSugerida(Long responseId, String supplierName, int productCount, int totalQuantity,
-        BigDecimal total, List<LinhaCompraSugerida> items) {}
+        BigDecimal total, BigDecimal minimumOrderValue, BigDecimal minimumOrderShortfall,
+        StatusPedidoMinimo minimumOrderStatus, List<LinhaCompraSugerida> items) {}
     public record VisaoComparacao(List<ComparacaoProduto> products, List<TotalDistribuidor> supplierTotals,
         List<CompraSugerida> suggestedPurchase, int productsWithoutOffer, int partiallyCoveredProducts,
         BigDecimal bestCompositionTotal, BigDecimal estimatedSavings) {}
