@@ -484,7 +484,11 @@ class FluxoCotaPrecoIntegrationTest {
         usuario.setSenhaHash(codificador.encode("SenhaAntiga123"));
         usuario.setPerfil(PerfilUsuario.BUYER);
         usuarios.save(usuario);
-        String autenticacao = loginFarmacia(email, "SenhaAntiga123");
+        var login = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(Map.of("email", email, "password", "SenhaAntiga123"))))
+            .andExpect(status().isOk()).andReturn();
+        String autenticacao = "Bearer " + json(login).get("token").asText();
+        String refreshAntesDaSenha = valorCookie(login, "cotapreco_refresh_farmacia");
 
         mvc.perform(put("/api/auth/password").header("Authorization", autenticacao).contentType(MediaType.APPLICATION_JSON)
             .content(mapper.writeValueAsString(Map.of("senhaAtual", "SenhaErrada123", "novaSenha", "SenhaNova456"))))
@@ -492,6 +496,8 @@ class FluxoCotaPrecoIntegrationTest {
         mvc.perform(put("/api/auth/password").header("Authorization", autenticacao).contentType(MediaType.APPLICATION_JSON)
             .content(mapper.writeValueAsString(Map.of("senhaAtual", "SenhaAntiga123", "novaSenha", "SenhaNova456"))))
             .andExpect(status().isNoContent());
+        mvc.perform(post("/api/auth/refresh").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_farmacia", refreshAntesDaSenha))
+            .header("X-Requested-With", "XMLHttpRequest")).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
             .content(mapper.writeValueAsString(Map.of("email", email, "password", "SenhaAntiga123"))))
             .andExpect(status().isUnprocessableEntity());
@@ -504,7 +510,11 @@ class FluxoCotaPrecoIntegrationTest {
     void redefinicaoDeSenhaEDeUsoUnicoEInvalidaSessaoAnterior() throws Exception {
         String autenticacaoFarmacia = loginFarmacia("admin@cotapreco.local", "Cotapreco@123");
         String tokenCotacao = criarEAbrirCotacao(autenticacaoFarmacia, "Cotação para redefinição");
-        String sessaoAnterior = cadastrarRepresentante(tokenCotacao, "Daniel Rocha", "81999994001", "daniel4001@teste.local");
+        var loginRepresentante = mvc.perform(post("/api/publico/representantes/cadastro").contentType(MediaType.APPLICATION_JSON)
+                .content(cadastroJson(tokenCotacao, "Daniel Rocha", "81999994001", "daniel4001@teste.local")))
+            .andExpect(status().isOk()).andReturn();
+        String sessaoAnterior = "Bearer " + json(loginRepresentante).get("token").asText();
+        String refreshAnterior = valorCookie(loginRepresentante, "cotapreco_refresh_representante");
         Representante representante = representantes.findByTelefone("81999994001").orElseThrow();
         String tokenAberto = "token-de-redefinicao-para-o-teste";
         TokenRedefinicaoSenhaRepresentante registro = new TokenRedefinicaoSenhaRepresentante();
@@ -517,6 +527,8 @@ class FluxoCotaPrecoIntegrationTest {
             .content(mapper.writeValueAsString(Map.of("token", tokenAberto, "novaSenha", "NovaSenha456"))))
             .andExpect(status().isOk());
         mvc.perform(get("/api/publico/representantes/eu").header("Authorization", sessaoAnterior)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/publico/representantes/refresh").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_representante", refreshAnterior))
+            .header("X-Requested-With", "XMLHttpRequest")).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/publico/representantes/login").contentType(MediaType.APPLICATION_JSON)
             .content(mapper.writeValueAsString(Map.of("telefone", "81999994001", "senha", "NovaSenha456"))))
             .andExpect(status().isOk());
@@ -536,7 +548,11 @@ class FluxoCotaPrecoIntegrationTest {
         usuario.setSenhaHash(codificador.encode("SenhaAntiga123"));
         usuario.setPerfil(PerfilUsuario.BUYER);
         usuarios.save(usuario);
-        String sessaoAnterior = loginFarmacia(email, "SenhaAntiga123");
+        var login = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(Map.of("email", email, "password", "SenhaAntiga123"))))
+            .andExpect(status().isOk()).andReturn();
+        String sessaoAnterior = "Bearer " + json(login).get("token").asText();
+        String refreshAnterior = valorCookie(login, "cotapreco_refresh_farmacia");
         String tokenAberto = "token-usuario-redefinicao-para-o-teste";
         TokenRedefinicaoSenhaUsuario registro = new TokenRedefinicaoSenhaUsuario();
         registro.setUsuario(usuario);
@@ -548,6 +564,8 @@ class FluxoCotaPrecoIntegrationTest {
             .content(mapper.writeValueAsString(Map.of("token", tokenAberto, "novaSenha", "NovaSenha456"))))
             .andExpect(status().isOk());
         mvc.perform(get("/api/auth/me").header("Authorization", sessaoAnterior)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/refresh").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_farmacia", refreshAnterior))
+            .header("X-Requested-With", "XMLHttpRequest")).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
             .content(mapper.writeValueAsString(Map.of("email", email, "password", "NovaSenha456"))))
             .andExpect(status().isOk());
@@ -848,14 +866,57 @@ class FluxoCotaPrecoIntegrationTest {
         mvc.perform(options("/api/publico/representantes/login")
             .header("Origin", "http://localhost:5173")
             .header("Access-Control-Request-Method", "POST")
-            .header("Access-Control-Request-Headers", "authorization,content-type"))
+            .header("Access-Control-Request-Headers", "authorization,content-type,x-requested-with"))
             .andExpect(status().isOk())
-            .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
+            .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"))
+            .andExpect(header().string("Access-Control-Allow-Credentials", "true"))
+            .andExpect(header().string("Access-Control-Allow-Headers", org.hamcrest.Matchers.containsString("x-requested-with")));
         mvc.perform(options("/api/publico/representantes/login")
             .header("Origin", "https://origem-invalida.example")
             .header("Access-Control-Request-Method", "POST"))
             .andExpect(status().isForbidden())
             .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    void refreshTokenRotacionaESessaoPodeSerEncerradaParaUsuariosERepresentantes() throws Exception {
+        var loginFarmacia = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(Map.of("email", "admin@cotapreco.local", "password", "Cotapreco@123"))))
+            .andExpect(status().isOk()).andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("cotapreco_refresh_farmacia=")))
+            .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("HttpOnly"))).andReturn();
+        String refreshFarmacia = valorCookie(loginFarmacia, "cotapreco_refresh_farmacia");
+        var renovacaoFarmacia = mvc.perform(post("/api/auth/refresh").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_farmacia", refreshFarmacia))
+                .header("X-Requested-With", "XMLHttpRequest"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.expiresIn").value(900)).andReturn();
+        String refreshFarmaciaNovo = valorCookie(renovacaoFarmacia, "cotapreco_refresh_farmacia");
+        mvc.perform(post("/api/auth/refresh").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_farmacia", refreshFarmacia))
+                .header("X-Requested-With", "XMLHttpRequest")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/refresh").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_farmacia", refreshFarmaciaNovo))
+                .header("X-Requested-With", "XMLHttpRequest")).andExpect(status().isUnauthorized());
+
+        var novaSessaoFarmacia = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(Map.of("email", "admin@cotapreco.local", "password", "Cotapreco@123"))))
+            .andExpect(status().isOk()).andReturn();
+        String refreshParaLogout = valorCookie(novaSessaoFarmacia, "cotapreco_refresh_farmacia");
+        mvc.perform(post("/api/auth/logout").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_farmacia", refreshParaLogout))
+                .header("X-Requested-With", "XMLHttpRequest")).andExpect(status().isNoContent())
+            .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Max-Age=0")));
+        mvc.perform(post("/api/auth/refresh").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_farmacia", refreshParaLogout))
+                .header("X-Requested-With", "XMLHttpRequest")).andExpect(status().isUnauthorized());
+
+        String autenticacaoFarmacia = "Bearer " + json(loginFarmacia).get("token").asText();
+        String tokenCotacao = criarEAbrirCotacao(autenticacaoFarmacia, "Cotação refresh representante");
+        var cadastroRepresentante = mvc.perform(post("/api/publico/representantes/cadastro").contentType(MediaType.APPLICATION_JSON)
+                .content(cadastroJson(tokenCotacao, "Representante Refresh", "81999995555", "refresh-rep@teste.local")))
+            .andExpect(status().isOk()).andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("cotapreco_refresh_representante="))).andReturn();
+        String refreshRepresentante = valorCookie(cadastroRepresentante, "cotapreco_refresh_representante");
+        var renovacaoRepresentante = mvc.perform(post("/api/publico/representantes/refresh").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_representante", refreshRepresentante))
+                .header("X-Requested-With", "XMLHttpRequest")).andExpect(status().isOk()).andReturn();
+        String refreshRepresentanteNovo = valorCookie(renovacaoRepresentante, "cotapreco_refresh_representante");
+        mvc.perform(post("/api/publico/representantes/logout").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_representante", refreshRepresentanteNovo))
+                .header("X-Requested-With", "XMLHttpRequest")).andExpect(status().isNoContent());
+        mvc.perform(post("/api/publico/representantes/refresh").cookie(new jakarta.servlet.http.Cookie("cotapreco_refresh_representante", refreshRepresentanteNovo))
+                .header("X-Requested-With", "XMLHttpRequest")).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -968,6 +1029,13 @@ class FluxoCotaPrecoIntegrationTest {
         JsonNode corpo = json(mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
             .content(mapper.writeValueAsString(Map.of("email", email, "password", senha)))).andExpect(status().isOk()).andReturn());
         return "Bearer " + corpo.get("token").asText();
+    }
+    private String valorCookie(org.springframework.test.web.servlet.MvcResult resultado, String nome) {
+        String cookie = resultado.getResponse().getHeader("Set-Cookie");
+        String prefixo = nome + "=";
+        int inicio = cookie.indexOf(prefixo) + prefixo.length();
+        int fim = cookie.indexOf(';', inicio);
+        return cookie.substring(inicio, fim < 0 ? cookie.length() : fim);
     }
     private long localizarCotacaoPorToken(String token) { return cotacoes.findByTokenPublico(token).orElseThrow().getId(); }
     private JsonNode json(org.springframework.test.web.servlet.MvcResult resultado) throws Exception { return mapper.readTree(resultado.getResponse().getContentAsString()); }

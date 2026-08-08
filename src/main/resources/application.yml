@@ -37,7 +37,10 @@ app:
   share-public-url: ${SHARE_PUBLIC_URL:${BACKEND_PUBLIC_URL:http://localhost:8080}}
   jwt:
     secret: ${JWT_SECRET:cotapreco-local-secret-change-me-please-32-characters}
-    expiration-minutes: ${JWT_EXPIRATION_MINUTES:480}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:15}
+  refresh-token:
+    expiration-days: ${REFRESH_TOKEN_EXPIRATION_DAYS:90}
+    cookie-secure: ${REFRESH_TOKEN_COOKIE_SECURE:false}
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
   frontend-public-url: ${FRONTEND_PUBLIC_URL:${FRONTEND_URL:http://localhost:5173}}
   email:

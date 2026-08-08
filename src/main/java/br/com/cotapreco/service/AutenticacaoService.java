@@ -26,17 +26,19 @@ import java.util.UUID;
 
 @Service @RequiredArgsConstructor
 public class AutenticacaoService {
+    public record ResultadoLogin(RespostaLogin resposta, String refreshToken, Instant refreshExpiresAt) {}
     private final UsuarioRepository repository; private final EmpresaRepository empresas; private final PasswordEncoder passwordEncoder; private final ServicoJwt jwtService;
     private final TokenRedefinicaoSenhaUsuarioRepository repositorioTokens; private final GeradorToken geradorToken; private final EnvioEmailService envioEmailService;
+    private final ServicoRefreshToken refreshTokens;
     @org.springframework.beans.factory.annotation.Value("${app.frontend-public-url}") private String urlFrontend;
-    public RespostaLogin login(SolicitacaoLogin request) {
+    public ResultadoLogin login(SolicitacaoLogin request) {
         Usuario user = repository.findByEmailIgnoreCase(request.email().trim()).filter(Usuario::isAtivo)
             .orElseThrow(() -> new RegraNegocioException("E-mail ou senha inválidos."));
         if (!user.getEmpresa().isAtivo() || !passwordEncoder.matches(request.password(), user.getSenhaHash()))
             throw new RegraNegocioException("E-mail ou senha inválidos.");
-        return new RespostaLogin(jwtService.generate(user), "Bearer", jwtService.expirationSeconds(), view(user));
+        return respostaLogin(user);
     }
-    @Transactional public RespostaLogin cadastrarFarmacia(SolicitacaoCadastroFarmacia request) {
+    @Transactional public ResultadoLogin cadastrarFarmacia(SolicitacaoCadastroFarmacia request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         String cnpj = request.cnpj().replaceAll("\\D", "");
         if (repository.existsByEmailIgnoreCase(email)) throw new RegraNegocioException("Este e-mail já está cadastrado. Faça login para continuar.");
@@ -48,8 +50,10 @@ public class AutenticacaoService {
         usuario.setEmpresa(empresa); usuario.setNome(request.nomeUsuario().trim()); usuario.setEmail(email);
         usuario.setSenhaHash(passwordEncoder.encode(request.senha())); usuario.setPerfil(PerfilUsuario.ADMIN);
         repository.save(usuario);
-        return new RespostaLogin(jwtService.generate(usuario), "Bearer", jwtService.expirationSeconds(), view(usuario));
+        return respostaLogin(usuario);
     }
+    public ResultadoLogin renovar(String refreshToken) { ServicoRefreshToken.TokenUsuario renovacao=refreshTokens.rotacionarUsuario(refreshToken);return respostaLogin(renovacao.usuario(),renovacao.token()); }
+    @Transactional public void sair(String refreshToken) { refreshTokens.revogarUsuario(refreshToken); }
     @Transactional
     public void alterarSenha(Usuario usuario, SolicitacaoAlteracaoSenha solicitacao) {
         if (!passwordEncoder.matches(solicitacao.senhaAtual(), usuario.getSenhaHash()))
@@ -57,6 +61,8 @@ public class AutenticacaoService {
         if (passwordEncoder.matches(solicitacao.novaSenha(), usuario.getSenhaHash()))
             throw new RegraNegocioException("A nova senha deve ser diferente da senha atual.");
         usuario.setSenhaHash(passwordEncoder.encode(solicitacao.novaSenha()));
+        usuario.setVersaoAutenticacao(usuario.getVersaoAutenticacao() + 1);
+        refreshTokens.revogarTodos(usuario);
         repository.save(usuario);
     }
     @Transactional
@@ -87,10 +93,13 @@ public class AutenticacaoService {
             throw new RegraNegocioException("A nova senha deve ser diferente da senha atual.");
         usuario.setSenhaHash(passwordEncoder.encode(solicitacao.novaSenha()));
         usuario.setVersaoAutenticacao(usuario.getVersaoAutenticacao() + 1);
+        refreshTokens.revogarTodos(usuario);
         registro.setUtilizadoEm(Instant.now());
         return new RespostaMensagem("Senha redefinida com sucesso. Você já pode entrar.");
     }
     public VisaoUsuario view(Usuario user) { return new VisaoUsuario(user.getId(), user.getNome(), user.getEmail(), user.getPerfil(), user.getEmpresa().getId(), user.getEmpresa().getNome()); }
+    private ResultadoLogin respostaLogin(Usuario usuario) { return respostaLogin(usuario, refreshTokens.criar(usuario)); }
+    private ResultadoLogin respostaLogin(Usuario usuario, ServicoRefreshToken.TokenEmitido refreshToken) { return new ResultadoLogin(new RespostaLogin(jwtService.generate(usuario), "Bearer", jwtService.expirationSeconds(), view(usuario)), refreshToken.valor(), refreshToken.expiraEm()); }
     private String gerarSlug(String nome) {
         String base = Normalizer.normalize(nome, Normalizer.Form.NFD).replaceAll("\\p{M}", "")
             .toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");

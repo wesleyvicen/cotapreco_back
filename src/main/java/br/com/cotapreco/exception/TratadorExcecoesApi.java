@@ -18,6 +18,9 @@ public class TratadorExcecoesApi {
     @ExceptionHandler(RegraNegocioException.class)
     ResponseEntity<ErroApi> business(RegraNegocioException ex) { return error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), Map.of()); }
 
+    @ExceptionHandler(CredencialInvalidaException.class)
+    ResponseEntity<ErroApi> invalidCredential(CredencialInvalidaException ex) { return error(HttpStatus.UNAUTHORIZED, ex.getMessage(), Map.of()); }
+
     @ExceptionHandler(ConflitoEstadoException.class)
     ResponseEntity<ErroApi> conflict(ConflitoEstadoException ex) { return error(HttpStatus.CONFLICT, ex.getMessage(), Map.of()); }
 

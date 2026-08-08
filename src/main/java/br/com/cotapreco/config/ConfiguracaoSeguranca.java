@@ -25,9 +25,9 @@ public class ConfiguracaoSeguranca {
         return http.csrf(c -> c.disable()).cors(c -> {}).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
             .authorizeHttpRequests(a -> a.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/esqueci-senha", "/api/auth/redefinir-senha", "/error").permitAll()
+                .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout", "/api/auth/esqueci-senha", "/api/auth/redefinir-senha", "/error").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/publico/representantes/cadastro", "/api/publico/representantes/login",
-                    "/api/publico/representantes/esqueci-senha", "/api/publico/representantes/redefinir-senha").permitAll()
+                    "/api/publico/representantes/refresh", "/api/publico/representantes/logout", "/api/publico/representantes/esqueci-senha", "/api/publico/representantes/redefinir-senha").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/publico/cotacoes/*", "/api/publico/cotacoes/*/compartilhar", "/api/publico/cotacoes/*/imagem-compartilhamento").permitAll()
                 .requestMatchers("/api/publico/**").hasRole("REPRESENTANTE")
                 .requestMatchers("/api/**").hasAnyRole("ADMIN", "BUYER", "VIEWER")
@@ -40,7 +40,7 @@ public class ConfiguracaoSeguranca {
         CorsConfiguration c = new CorsConfiguration();
         c.setAllowedOrigins(java.util.Arrays.stream(frontendUrl.split(",")).map(String::trim).filter(v -> !v.isBlank()).toList());
         c.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        c.setAllowedHeaders(List.of("Authorization", "Content-Type")); c.setAllowCredentials(false); c.setMaxAge(3600L);
+        c.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With")); c.setAllowCredentials(true); c.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource(); source.registerCorsConfiguration("/**", c); return source;
     }
 }

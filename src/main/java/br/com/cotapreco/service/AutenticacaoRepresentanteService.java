@@ -21,6 +21,7 @@ import java.util.Locale;
 
 @Service @RequiredArgsConstructor
 public class AutenticacaoRepresentanteService {
+    public record ResultadoAutenticacao(RespostaAutenticacaoRepresentante resposta, String refreshToken, Instant refreshExpiresAt) {}
     private final RepresentanteRepository repositorio;
     private final TokenRedefinicaoSenhaRepresentanteRepository repositorioTokens;
     private final CotacaoRepository repositorioCotacoes;
@@ -28,10 +29,11 @@ public class AutenticacaoRepresentanteService {
     private final ServicoJwt servicoJwt;
     private final GeradorToken geradorToken;
     private final EnvioEmailService envioEmailService;
+    private final ServicoRefreshToken refreshTokens;
     @Value("${app.frontend-public-url}") private String urlFrontend;
 
     @Transactional
-    public RespostaAutenticacaoRepresentante cadastrar(SolicitacaoCadastroRepresentante solicitacao) {
+    public ResultadoAutenticacao cadastrar(SolicitacaoCadastroRepresentante solicitacao) {
         Cotacao cotacao = repositorioCotacoes.findByTokenPublico(solicitacao.tokenCotacao())
             .orElseThrow(() -> new RegraNegocioException("Cotação não encontrada."));
         if (!cotacao.podeReceberRespostas()) throw new RegraNegocioException("Esta cotação não está aberta para cadastro e respostas.");
@@ -52,7 +54,7 @@ public class AutenticacaoRepresentanteService {
     }
 
     @Transactional
-    public RespostaAutenticacaoRepresentante entrar(SolicitacaoLoginRepresentante solicitacao) {
+    public ResultadoAutenticacao entrar(SolicitacaoLoginRepresentante solicitacao) {
         String telefone = normalizarTelefone(solicitacao.telefone());
         Representante representante = repositorio.findByTelefone(telefone).filter(Representante::isAtivo)
             .orElseThrow(() -> new RegraNegocioException("Telefone ou senha inválidos."));
@@ -61,6 +63,9 @@ public class AutenticacaoRepresentanteService {
         representante.setUltimoLoginEm(Instant.now());
         return respostaAutenticacao(representante);
     }
+
+    public ResultadoAutenticacao renovar(String refreshToken) { ServicoRefreshToken.TokenRepresentante renovacao=refreshTokens.rotacionarRepresentante(refreshToken);return respostaAutenticacao(renovacao.representante(),renovacao.token()); }
+    @Transactional public void sair(String refreshToken) { refreshTokens.revogarRepresentante(refreshToken); }
 
     @Transactional(readOnly = true)
     public VisaoRepresentante visualizar(Representante representante) {
@@ -92,6 +97,7 @@ public class AutenticacaoRepresentanteService {
         Representante representante = registro.getRepresentante();
         representante.setSenhaHash(codificadorSenha.encode(solicitacao.novaSenha()));
         representante.setVersaoAutenticacao(representante.getVersaoAutenticacao() + 1);
+        refreshTokens.revogarTodos(representante);
         registro.setUtilizadoEm(Instant.now());
         return new MensagemRepresentante("Senha redefinida com sucesso. Você já pode entrar.");
     }
@@ -105,6 +111,7 @@ public class AutenticacaoRepresentanteService {
             throw new RegraNegocioException("A nova senha deve ser diferente da senha atual.");
         representante.setSenhaHash(codificadorSenha.encode(solicitacao.novaSenha()));
         representante.setVersaoAutenticacao(representante.getVersaoAutenticacao() + 1);
+        refreshTokens.revogarTodos(representante);
         repositorio.save(representante);
         return new MensagemRepresentante("Senha alterada com sucesso. Entre novamente para continuar.");
     }
@@ -116,8 +123,9 @@ public class AutenticacaoRepresentanteService {
         return numeros;
     }
 
-    private RespostaAutenticacaoRepresentante respostaAutenticacao(Representante representante) {
-        return new RespostaAutenticacaoRepresentante(servicoJwt.gerar(representante), "Bearer", servicoJwt.expiracaoSegundos(), visualizar(representante));
+    private ResultadoAutenticacao respostaAutenticacao(Representante representante) { return respostaAutenticacao(representante, refreshTokens.criar(representante)); }
+    private ResultadoAutenticacao respostaAutenticacao(Representante representante, ServicoRefreshToken.TokenEmitido refreshToken) {
+        return new ResultadoAutenticacao(new RespostaAutenticacaoRepresentante(servicoJwt.gerar(representante), "Bearer", servicoJwt.expiracaoSegundos(), visualizar(representante)), refreshToken.valor(), refreshToken.expiraEm());
     }
     private String normalizarEmail(String valor) { return valor.trim().toLowerCase(Locale.ROOT); }
     private void validarSenha(String senha) {
