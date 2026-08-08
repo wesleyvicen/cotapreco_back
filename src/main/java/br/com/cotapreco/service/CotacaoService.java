@@ -96,7 +96,9 @@ public class CotacaoService {
         return view(repository.save(q));
     }
 
-    @Transactional(readOnly = true) public List<ResumoCotacao> list() { Long companyId = currentUser.companyId(); return repository.findAllByEmpresaIdOrderByCriadoEmDesc(companyId).stream().map(this::listView).toList(); }
+    @Transactional(readOnly = true) public List<ResumoCotacao> list() { Long companyId = currentUser.companyId();
+        Map<Long,List<PedidoCompra>> pedidosAtuais=purchaseOrderRepository.findAllByCotacaoEmpresaIdAndStatusIn(companyId,List.of(StatusPedidoCompra.GERADO,StatusPedidoCompra.COMPARTILHADO)).stream().collect(Collectors.groupingBy(p->p.getCotacao().getId()));
+        return repository.findAllByEmpresaIdOrderByCriadoEmDesc(companyId).stream().map(q->listView(q,pedidosAtuais.getOrDefault(q.getId(),List.of()))).toList(); }
     @Transactional(readOnly = true) public VisaoCotacao get(Long id) { return view(findOwned(id)); }
     @Transactional public VisaoItemCotacao atualizarItem(Long cotacaoId, Long itemId, SolicitacaoAtualizacaoItemCotacao request) {
         Cotacao cotacao = findOwned(cotacaoId);
@@ -188,7 +190,7 @@ public class CotacaoService {
         if (candidatos.size() > 1) throw new RegraNegocioException("Há mais de um produto com o nome " + nome + ". Informe o EAN.");
         return candidatos.stream().findFirst();
     }
-    private ResumoCotacao listView(Cotacao q) { return new ResumoCotacao(q.getId(), q.getNome(), q.getStatus(), q.getExpiraEm(), q.getCriadoEm(), (int) q.getItens().stream().filter(ItemCotacao::isAtivo).count(), responseRepository.countByCotacaoIdAndStatus(q.getId(), StatusResposta.SUBMITTED)); }
+    private ResumoCotacao listView(Cotacao q,List<PedidoCompra> pedidosAtuais) { int itensComprados=pedidosAtuais.stream().mapToInt(p->p.getItens().size()).sum(); Instant ultimaCompra=pedidosAtuais.stream().map(PedidoCompra::getGeradoEm).max(Instant::compareTo).orElse(null); return new ResumoCotacao(q.getId(), q.getNome(), q.getStatus(), q.getExpiraEm(), q.getCriadoEm(), (int) q.getItens().stream().filter(ItemCotacao::isAtivo).count(), responseRepository.countByCotacaoIdAndStatus(q.getId(), StatusResposta.SUBMITTED), itensComprados>0,itensComprados,ultimaCompra); }
     private VisaoCotacao view(Cotacao q) { return new VisaoCotacao(q.getId(), q.getNome(), q.getStatus(), q.getExpiraEm(), q.getCriadoEm(), q.getAtualizadoEm(), q.getTokenPublico(), q.getTokenPublico() == null ? null : removerBarra(urlPublicaCompartilhamento) + "/api/publico/cotacoes/" + q.getTokenPublico() + "/compartilhar" + versaoCompartilhamento(q), q.getItens().stream().map(this::itemView).toList()); }
     private String versaoCompartilhamento(Cotacao cotacao) { return cotacao.getExpiraEm() == null ? "" : "?v=" + cotacao.getExpiraEm().toEpochMilli(); }
     private VisaoItemCotacao itemView(ItemCotacao i) { return new VisaoItemCotacao(i.getId(), i.getProduto().getId(), i.getProduto().getEan(), i.getProduto().getNome(), laboratorio(i), i.getQuantidadeSolicitada(), i.isAtivo()); }

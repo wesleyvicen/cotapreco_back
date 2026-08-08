@@ -29,7 +29,8 @@ public final class CotacaoDtos {
     public record SolicitacaoAtualizacaoItemCotacao(@NotNull @Min(1) Integer quantity, boolean active) {}
     public record VisaoItemCotacao(Long id, Long productId, String ean, String productName, String laboratory, Integer requestedQuantity, boolean active) {}
     public record ResumoCotacao(Long id, String name, StatusCotacao status, Instant expiresAt, Instant createdAt,
-        int productCount, long submittedResponses) {}
+        int productCount, long submittedResponses, boolean purchaseComparisonEligible, int purchasedItemCount,
+        Instant lastPurchaseAt) {}
     public record VisaoCotacao(Long id, String name, StatusCotacao status, Instant expiresAt, Instant createdAt,
         Instant updatedAt, String publicToken, String publicUrl, List<VisaoItemCotacao> items) {}
     public record SolicitacaoAtivacaoResposta(boolean active) {}

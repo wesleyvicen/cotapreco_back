@@ -1,6 +1,7 @@
 package br.com.cotapreco.controller;
 
 import br.com.cotapreco.dto.ComparacaoDtos.VisaoComparacao;
+import br.com.cotapreco.dto.ComparativoCompraDtos.VisaoComparativoCompra;
 import br.com.cotapreco.dto.CotacaoDtos.*;
 import br.com.cotapreco.dto.EscolhaCompraDtos.*;
 import br.com.cotapreco.dto.HistoricoPlanoDtos.*;
@@ -19,10 +20,11 @@ import java.util.List;
 
 @RestController @RequestMapping("/api/quotations") @RequiredArgsConstructor
 public class CotacaoController {
-    private final CotacaoService service; private final ComparacaoCotacaoService comparisonService;
+    private final CotacaoService service; private final ComparacaoCotacaoService comparisonService; private final ComparativoCompraService purchaseComparisonService;
     private final EscolhaCompraCotacaoService purchaseSelectionService; private final PlanoCompraService purchasePlanService; private final PedidoMinimoService minimumOrderService; private final HistoricoPlanoCompraService purchasePlanHistoryService; private final UsuarioAtualService currentUser;
     private final GeradorModeloImportacaoService templateService;
     @GetMapping public List<ResumoCotacao> list() { return service.list(); }
+    @GetMapping("/purchase-comparison") public VisaoComparativoCompra purchaseComparison(@RequestParam String ids) { return purchaseComparisonService.comparar(ids); }
     @GetMapping("/{id}") public VisaoCotacao get(@PathVariable Long id) { return service.get(id); }
     @PostMapping @PreAuthorize("hasAnyRole('ADMIN','BUYER')") public VisaoCotacao create(@Valid @RequestBody SolicitacaoCriacaoCotacao request) { return service.create(request); }
     @PostMapping(value = "/import/analyze", consumes = "multipart/form-data") @PreAuthorize("hasAnyRole('ADMIN','BUYER')")
