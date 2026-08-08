@@ -187,7 +187,9 @@ class FluxoCotaPrecoIntegrationTest {
         long pedidoId = pedido.get("id").asLong();
         byte[] pdf = mvc.perform(get("/api/quotations/{id}/orders/{orderId}/pdf", cotacaoId, pedidoId)
             .header("Authorization", autenticacaoFarmacia)).andExpect(status().isOk())
-            .andExpect(content().contentType(MediaType.APPLICATION_PDF)).andReturn().getResponse().getContentAsByteArray();
+            .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+            .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Distribuidora%20A%20-%20Reposi")))
+            .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString(".pdf"))).andReturn().getResponse().getContentAsByteArray();
         assertThat(new String(pdf, 0, 4, StandardCharsets.US_ASCII)).isEqualTo("%PDF");
         com.lowagie.text.pdf.PdfReader leitorPdf = new com.lowagie.text.pdf.PdfReader(pdf);
         String textoPdf = new com.lowagie.text.pdf.parser.PdfTextExtractor(leitorPdf).getTextFromPage(1);
@@ -195,7 +197,9 @@ class FluxoCotaPrecoIntegrationTest {
         assertThat(textoPdf).doesNotContain("Estoque adicional confirmado por telefone", "Entregar pela manhã", "Observação");
         byte[] imagem = mvc.perform(get("/api/quotations/{id}/orders/{orderId}/image", cotacaoId, pedidoId)
             .header("Authorization", autenticacaoFarmacia)).andExpect(status().isOk())
-            .andExpect(content().contentType(MediaType.IMAGE_PNG)).andReturn().getResponse().getContentAsByteArray();
+            .andExpect(content().contentType(MediaType.IMAGE_PNG))
+            .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Distribuidora%20A%20-%20Reposi")))
+            .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString(".png"))).andReturn().getResponse().getContentAsByteArray();
         assertThat(Arrays.copyOf(imagem, 8)).containsExactly((byte) 0x89, (byte) 0x50, (byte) 0x4e, (byte) 0x47, (byte) 0x0d, (byte) 0x0a, (byte) 0x1a, (byte) 0x0a);
 
         String plano110 = mapper.writeValueAsString(Map.of("items", List.of(
